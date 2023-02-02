@@ -21,4 +21,4 @@ Distributed system-based live performance augmentation
 
 
 ### References:
-[Sending and Receiving UDP packets on Arduino](https://docs.arduino.cc/tutorials/ethernet-shield-rev2/udp-send-receive-string)
+[Sending and Receiving UDP packets on Arduino](https://docs.arduino.cc/library-examples/wifi-library/WiFiUdpSendReceiveString)
