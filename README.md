@@ -17,3 +17,8 @@ Distributed system-based live performance augmentation
 ### Actuator-Metronome
 
 ### Actuator-Effects
+
+
+
+### References:
+[Sending and Receiving UDP packets on Arduino](https://docs.arduino.cc/tutorials/ethernet-shield-rev2/udp-send-receive-string)
