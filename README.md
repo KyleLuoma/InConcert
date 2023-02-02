@@ -22,3 +22,4 @@ Distributed system-based live performance augmentation
 
 ### References:
 [Sending and Receiving UDP packets on Arduino](https://docs.arduino.cc/library-examples/wifi-library/WiFiUdpSendReceiveString)
+[Network Time Protocol Wikipedia](https://en.wikipedia.org/wiki/Network_Time_Protocol)
