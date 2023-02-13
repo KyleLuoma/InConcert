@@ -58,7 +58,7 @@ void udp_listener() {
         memset(buf, 0, BUFFER_SIZE);
         n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
         if(n < 0) {
-            //do error stuff
+            printf("recvfrom error");
         } else {
             printf("Received UDP packet");
         }
