@@ -12,18 +12,19 @@
 
 
 void main() {
-
-    loop();
-
+    fprintf(stdout, "\n ------- InConcert Aggregator Broadcaster ------- \n ");
+    udp_listener();
 }
 
 
 void loop() {
+    printf("\n Starting UDP listener");
     udp_listener();
 }
 
 
 void udp_listener() {
+    fprintf(stdout, "\n UDP listener running \n");
     int sockfd;
     int portno;
     int clientlen;
@@ -38,7 +39,7 @@ void udp_listener() {
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
     if(sockfd < 0) {
-        //do error stuff
+        fprintf(stdout, "sockfd initialization error \n");
     }
 
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
@@ -46,10 +47,10 @@ void udp_listener() {
     bzero((char *)&serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serveraddr.sin_port = htons(PORT);
+    serveraddr.sin_port = htons((unsigned short)PORT);
 
-    if(bind(sockfd,(struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
-        //do error stuff
+    if(bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
+        fprintf(stdout, "error binding to socket \n");
     }
 
     buf = malloc(BUFFER_SIZE);
@@ -58,9 +59,9 @@ void udp_listener() {
         memset(buf, 0, BUFFER_SIZE);
         n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
         if(n < 0) {
-            printf("recvfrom error");
+            fprintf(stdout, "recvfrom error \n");
         } else {
-            printf("Received UDP packet");
+            fprintf(stdout, "Received UDP packet \n");
         }
         hostp = gethostbyaddr(
             (const char *)&clientaddr.sin_addr.s_addr, 
@@ -68,13 +69,15 @@ void udp_listener() {
             AF_INET
         );
         if(hostaddrp == NULL) {
-            //do error stuff
+            fprintf(stdout, "Error: null host address\n");
         }
         hostaddrp = inet_ntoa(clientaddr.sin_addr);
         if(hostaddrp == NULL) {
             //do error stuff
         } else {
-            printf("%i", clientaddr.sin_addr);
+            fprintf(stdout, "%i \n", clientaddr.sin_addr);
+            fprintf(stdout, hostaddrp);
+            fprintf(stdout, "\n");
         }
         n = sendto(sockfd, buf, n, 0, (struct sockaddr*)&clientaddr, clientlen);
         if(n < 0){
