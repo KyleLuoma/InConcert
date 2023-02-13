@@ -1,6 +1,7 @@
 #include "aggregator.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -31,6 +32,7 @@ void udp_listener() {
     struct hostent *hostp;
     char *buf;
     char *hostaddrp;
+    int optval;
     int n;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
