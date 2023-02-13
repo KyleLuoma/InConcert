@@ -72,7 +72,7 @@ void udp_listener() {
         if(hostaddrp == NULL) {
             //do error stuff
         } else {
-            printf(hostaddrp);
+            printf("%i", clientaddr.sin_addr);
         }
         n = sendto(sockfd, buf, n, 0, (struct sockaddr*)&clientaddr, clientlen);
         if(n < 0){
