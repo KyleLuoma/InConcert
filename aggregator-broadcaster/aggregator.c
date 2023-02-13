@@ -39,7 +39,7 @@ void udp_listener() {
         //do error stuff
     }
 
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *), sizeof(int));
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
 
     bzero((char *)&serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
@@ -54,8 +54,8 @@ void udp_listener() {
 
     while(1) {
         memset(buf, 0, BUFFER_SIZE);
-        n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struc sockaddr *)&clientaddr, &clientlen);
-        if(n < ) {
+        n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
+        if(n < 0) {
             //do error stuff
         }
         hostp = gethostbyaddr(
