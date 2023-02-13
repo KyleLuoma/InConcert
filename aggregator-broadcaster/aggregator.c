@@ -59,6 +59,8 @@ void udp_listener() {
         n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
         if(n < 0) {
             //do error stuff
+        } else {
+            printf("Received UDP packet");
         }
         hostp = gethostbyaddr(
             (const char *)&clientaddr.sin_addr.s_addr, 
