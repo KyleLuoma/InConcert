@@ -1,3 +1,4 @@
+#include <aggregator.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -17,7 +18,7 @@ void main() {
 
 
 void loop() {
-
+    udp_listener();
 }
 
 
