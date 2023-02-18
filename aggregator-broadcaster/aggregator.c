@@ -15,7 +15,9 @@
 void main() {
     fprintf(stdout, "\n ------- InConcert Aggregator Broadcaster ------- \n ");
 
-    pthread_t udp_listener, udp_broadcaster, tempo_calculator, event_manager, screen_display;
+    pthread_t udp_listener_thread, udp_broadcaster_thread, 
+              tempo_calculator_thread, event_manager_thread, 
+              screen_display_thread;
 
     udp_listener();
 }
