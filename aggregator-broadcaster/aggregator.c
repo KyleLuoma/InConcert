@@ -8,11 +8,15 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 
 
 void main() {
     fprintf(stdout, "\n ------- InConcert Aggregator Broadcaster ------- \n ");
+
+    pthread_t udp_listener, udp_broadcaster, tempo_calculator, event_manager, screen_display;
+
     udp_listener();
 }
 
@@ -89,3 +93,8 @@ void udp_listener() {
 // udp_listener() Adapted from:
 // Example of a simple UDP server:
 // https://gist.github.com/miekg/a61d55a8ec6560ad6c4a2747b21e6128
+
+
+// pthread usage
+// https://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
+
