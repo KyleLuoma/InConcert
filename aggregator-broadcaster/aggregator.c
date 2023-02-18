@@ -21,19 +21,24 @@ void main() {
 
     int udp_listener_t_ret, udp_broadcaster_t_ret,
         tempo_calculator_t_ret, event_manager_t_ret,
-        screen_display_t, ret;
+        screen_display_t_ret;
 
-    udp_listener_t_ret = pthread_create( &udp_listener_thread, NULL, void * (udp_listener) (void *), NULL);
+    int *receive_buffer = malloc(BUFFER_SIZE);
+    int *send_buffer = malloc(BUFFER_SIZE);
+
+    struct udp_listener_t_arg listener_arg;
+    listener_arg.rcv_buffer = receive_buffer;
+
+    udp_listener_t_ret = pthread_create( &udp_listener_thread, NULL, &udp_listener, &listener_arg);
+
+    while(1) {};
 }
 
 
-void loop() {
-    printf("\n Starting UDP listener");
-    udp_listener();
-}
+static void * udp_listener(void *arg) {
 
+    struct udp_listener_t_arg *listener_arg = arg;
 
-void udp_listener() {
     fprintf(stdout, "\n UDP listener running \n");
     int sockfd;
     int portno;
@@ -45,6 +50,8 @@ void udp_listener() {
     char *hostaddrp;
     int optval;
     int n;
+
+    int msg_type;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -66,12 +73,15 @@ void udp_listener() {
     buf = malloc(BUFFER_SIZE);
 
     while(1) {
+
+        msg_type = -1;
+
         memset(buf, 0, BUFFER_SIZE);
-        n = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
+        n = recvfrom(sockfd, listener_arg->rcv_buffer, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
         if(n < 0) {
-            fprintf(stdout, "recvfrom error \n");
+            fprintf(stdout, "\nrecvfrom error \n");
         } else {
-            fprintf(stdout, "Received UDP packet \n");
+            fprintf(stdout, "\nReceived UDP packet \n");
         }
         hostp = gethostbyaddr(
             (const char *)&clientaddr.sin_addr.s_addr, 
@@ -79,17 +89,33 @@ void udp_listener() {
             AF_INET
         );
         if(hostaddrp == NULL) {
-            fprintf(stdout, "Error: null host address\n");
+            fprintf(stdout, "\nError: null host address\n");
         }
         hostaddrp = inet_ntoa(clientaddr.sin_addr);
         if(hostaddrp == NULL) {
             //do error stuff
         } else {
-            fprintf(stdout, "%i \n", clientaddr.sin_addr);
             fprintf(stdout, hostaddrp);
-            fprintf(stdout, "\n");
+
+            //How to read from buffer:
+            //htonl(*(listener_arg->rcv_buffer + i))
+
+            msg_type = htonl(*(listener_arg->rcv_buffer));
+
+            fprintf(stdout, "\nMessage type: %i\n", msg_type);
         }
-        n = sendto(sockfd, buf, n, 0, (struct sockaddr*)&clientaddr, clientlen);
+
+        //handle message types
+
+        if(msg_type == TEMPO) {
+            fprintf(stdout, "Received tempo message!\n");
+        } else if(msg_type == EVENT) {
+            fprintf(stdout, "Received event message!\n");
+        } else if(msg_type == TIME) {
+            fprintf(stdout, "Received time message!\n");
+        }
+
+        n = sendto(sockfd, listener_arg->rcv_buffer, n, 0, (struct sockaddr*)&clientaddr, clientlen);
         if(n < 0){
             //do error stuff
         }
