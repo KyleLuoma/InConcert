@@ -23,7 +23,7 @@ void main() {
         tempo_calculator_t_ret, event_manager_t_ret,
         screen_display_t, ret;
 
-    udp_listener_t_ret = pthread_create( &udp_listener_thread, NULL, udp_listener, (void*));
+    udp_listener_t_ret = pthread_create( &udp_listener_thread, NULL, void * (udp_listener) (void *), NULL);
 }
 
 
