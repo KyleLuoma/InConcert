@@ -19,7 +19,11 @@ void main() {
               tempo_calculator_thread, event_manager_thread, 
               screen_display_thread;
 
-    udp_listener();
+    int udp_listener_t_ret, udp_broadcaster_t_ret,
+        tempo_calculator_t_ret, event_manager_t_ret,
+        screen_display_t, ret;
+
+    udp_listener_t_ret = pthread_create( &udp_listener_thread, NULL, udp_listener, (void*));
 }
 
 
