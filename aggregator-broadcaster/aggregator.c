@@ -1,4 +1,6 @@
 #include "aggregator.h"
+#include "tempo_calculator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +43,10 @@ void main() {
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &listener_arg);
 
     while(1) {};
+
+    free(send_buffer);
+    free(tempo_buffer);
+    free(event_buffer);
 }
 
 void init_buffer_stats(void *buffer_stats) {
@@ -48,23 +54,32 @@ void init_buffer_stats(void *buffer_stats) {
     stats->tempo_buffer_last_write_ix = 0;
     stats->tempo_buffer_last_read_ix = 0;
     stats->tempo_buffer_locked = 0;
+    stats->tempo_buffer_rollovers = 0;
     stats->event_buffer_last_write_ix = 0;
     stats->event_buffer_last_read_ix = 0;
     stats->event_buffer_locked = 0;
+    stats->event_buffer_rollovers = 0;
 }
 
 //Takes in the same argument as the udp_listener and monitors stats to determine
 //if an update occurred to buffers
 static void * buffer_watcher(void *arg) {
+
     struct udp_listener_t_arg *args = arg;
     int tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
+    int tb_last_rollover = args->shared_buffer_stats->tempo_buffer_rollovers;
+
     while(1) {
         if(tb_last_write < args->shared_buffer_stats->tempo_buffer_last_write_ix) {
             fprintf(stdout, "buffer_watcher detected a tempo buffer update with payload:\n");
             struct tempo_message msg = args->tempo_buffer[args->shared_buffer_stats->tempo_buffer_last_write_ix];
-            fprintf(stdout, "     message_type: %i, bpm: %i, confidence: %i, timestamp: %lld\n", 
-                msg.message_type, msg.bpm, msg.confidence, msg.timestamp
+            fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, timestamp: %lld\n", 
+                msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.timestamp
             );
+            tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
+        }
+        if(tb_last_rollover < args->shared_buffer_stats->tempo_buffer_rollovers) {
+            tb_last_rollover = args->shared_buffer_stats->tempo_buffer_rollovers;
             tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
         }
     }
@@ -90,6 +105,7 @@ static void * udp_listener(void *arg) {
     int n;
 
     int msg_type;
+    int client_address;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -118,6 +134,7 @@ static void * udp_listener(void *arg) {
         } else {
             fprintf(stdout, "\nReceived UDP packet \n");
         }
+        client_address = clientaddr.sin_addr.s_addr;
         hostp = gethostbyaddr(
             (const char *)&clientaddr.sin_addr.s_addr, 
             sizeof(clientaddr.sin_addr.s_addr), 
@@ -147,9 +164,10 @@ static void * udp_listener(void *arg) {
             struct tempo_message msg;
 
             msg.message_type = msg_type;
-            msg.bpm = htonl(*(receive_buffer + 1));
-            msg.confidence = htonl(*(receive_buffer + 2));
-            msg.timestamp = htonl(*(receive_buffer + 3));
+            msg.device_id = htonl(*(receive_buffer + 1));
+            msg.bpm = htonl(*(receive_buffer + 2));
+            msg.confidence = htonl(*(receive_buffer + 3));
+            msg.timestamp = htonl(*(receive_buffer + 4));
 
             write_to_tempo_buffer(listener_arg->tempo_buffer, msg, buffer_stats);
         } else if(msg_type == EVENT) {
@@ -176,21 +194,30 @@ int write_to_tempo_buffer(void *tempo_buffer, struct tempo_message message, void
     if(stats->tempo_buffer_locked == 1) {
         fprintf(stdout, "tempo buffer locked!");
         return -1;
-    } else {
-        fprintf(stdout, "Writing tempo to buffer\n");
-        fprintf(stdout, "Message type: %i, BPM: %i, Confidence: %i, timestamp: %llu\n", 
-            message.message_type,
-            message.bpm,
-            message.confidence,
-            message.timestamp
-        );
-        stats->tempo_buffer_locked = 1;
-        stats->tempo_buffer_last_write_ix++;
-        tempo_buff[stats->tempo_buffer_last_write_ix] = message;
-        stats->tempo_buffer_locked = 0;
-        fprintf(stdout, "Wrote message to buffer position %i\n", stats->tempo_buffer_last_write_ix);
+    } 
+
+    stats->tempo_buffer_locked = 1;
+
+    //Check if we need to rollover to 0
+    if(stats->tempo_buffer_last_write_ix >= TEMPO_BUFFER_SIZE) {
+        stats->tempo_buffer_last_write_ix = 0;
+        stats->tempo_buffer_rollovers++;
     }
 
+    fprintf(stdout, "Writing tempo to buffer\n");
+    fprintf(stdout, "Message type: %i, Device ID: %i, BPM: %i, Confidence: %i, timestamp: %llu\n", 
+        message.message_type,
+        message.device_id,
+        message.bpm,
+        message.confidence,
+        message.timestamp
+    );
+    
+    stats->tempo_buffer_last_write_ix++;
+    tempo_buff[stats->tempo_buffer_last_write_ix] = message;
+    fprintf(stdout, "Wrote message to buffer position %i\n", stats->tempo_buffer_last_write_ix);
+
+    stats->tempo_buffer_locked = 0;
 }
 
 // udp_listener() Adapted from:

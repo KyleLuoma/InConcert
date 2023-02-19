@@ -1,0 +1,2 @@
+
+#define TEMPO_LOG_SIZE 1024

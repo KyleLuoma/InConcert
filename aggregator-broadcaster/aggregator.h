@@ -2,8 +2,8 @@
 #define PORT 54523
 #define RECEIVE_BUFFER_SIZE 1024 //bytes
 #define SEND_BUFFER_SIZE 1024 //bytes
-#define EVENT_BUFFER_SIZE 64 //Number of events
-#define TEMPO_BUFFER_SIZE 64 //Number of events
+#define EVENT_BUFFER_SIZE 16 //Number of events
+#define TEMPO_BUFFER_SIZE 16 //Number of events
 
 //Message types:
 #define TEMPO 0
@@ -14,6 +14,7 @@
 //Message structs:
 struct tempo_message {
     int message_type;
+    int device_id;
     int bpm;
     int confidence;
     long long timestamp;
@@ -21,6 +22,7 @@ struct tempo_message {
 
 struct event_message {
     int message_type;
+    int device_id;
     int event_type;
     long long timestamp;
     int num_params;
@@ -29,6 +31,7 @@ struct event_message {
 
 struct time {
     int message_type;
+    int device_id;
     long long timestamp;
 };
 
@@ -43,10 +46,12 @@ struct shared_buffer_stats {
     int tempo_buffer_last_write_ix;
     int tempo_buffer_last_read_ix;
     int tempo_buffer_locked;
+    int tempo_buffer_rollovers;
 
     int event_buffer_last_write_ix;
     int event_buffer_last_read_ix;
     int event_buffer_locked;
+    int event_buffer_rollovers;
 };
 
 
