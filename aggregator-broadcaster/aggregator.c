@@ -1,5 +1,5 @@
-#include "aggregator.h"
 #include "tempo_calculator.h"
+#include "aggregator.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <time.h>
 
 
 
@@ -41,6 +42,7 @@ void main() {
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &listener_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &listener_arg);
+    buffer_watcher_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &listener_arg);
 
     while(1) {};
 
@@ -63,7 +65,7 @@ void init_buffer_stats(void *buffer_stats) {
 
 //Takes in the same argument as the udp_listener and monitors stats to determine
 //if an update occurred to buffers
-static void * buffer_watcher(void *arg) {
+void * buffer_watcher(void *arg) {
 
     struct udp_listener_t_arg *args = arg;
     int tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
@@ -218,6 +220,11 @@ int write_to_tempo_buffer(void *tempo_buffer, struct tempo_message message, void
     fprintf(stdout, "Wrote message to buffer position %i\n", stats->tempo_buffer_last_write_ix);
 
     stats->tempo_buffer_locked = 0;
+}
+
+void kill_time(int time_ms) {
+    clock_t start = clock();
+    while(clock() < start + time_ms) {}
 }
 
 // udp_listener() Adapted from:

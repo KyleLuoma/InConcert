@@ -64,4 +64,6 @@ int write_to_tempo_buffer(
     );
 
 static void * udp_listener(void *listener_arg);
-static void * buffer_watcher(void *arg);
+void * buffer_watcher(void *arg);
+
+void kill_time(int time_ms);
