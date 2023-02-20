@@ -230,6 +230,9 @@ static void * udp_listener(void *arg) {
             //htonl(*(global_t_arg->rcv_buffer + i))
 
             msg_type = htonl(*(receive_buffer));
+            if(msg_type > 1000) {
+                msg_type = htons(msg_type);
+            }
 
             fprintf(stdout, "\nMessage type: %i\n", msg_type);
         }
@@ -241,8 +244,8 @@ static void * udp_listener(void *arg) {
             struct tempo_message msg;
 
             msg.message_type = msg_type;
-            msg.device_id = htonl(*(receive_buffer + 1));
-            msg.bpm = htonl(*(receive_buffer + 2));
+            msg.device_id = (int) htons(*(receive_buffer + 1));
+            msg.bpm = htons(*(receive_buffer + 2));
             msg.confidence = htonl(*(receive_buffer + 3));
             msg.timestamp = htonl(*(receive_buffer + 4));
 
