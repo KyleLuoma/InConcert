@@ -4,6 +4,8 @@
 #define THRESHOLD_LOW 200
 #define THRESHOLD_HIGH 360
 
+#include <netinet/in.h>
+
 int val_vib_0 = 0;
 
 void setup() {
