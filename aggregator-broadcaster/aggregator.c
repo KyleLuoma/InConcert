@@ -104,8 +104,9 @@ static void * udp_broadcaster(void *arg) {
 
     broadcastaddr.sin_family = AF_INET;
     broadcastaddr.sin_port = BROADCAST_PORT;
-    inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
-
+    broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
+    // inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
+    
     fprintf(stdout, "Broadcast address set to: ");
     fprintf(stdout, inet_ntoa(broadcastaddr.sin_addr));
     fprintf(stdout, "\n");
@@ -117,6 +118,9 @@ static void * udp_broadcaster(void *arg) {
     }
 
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
+    int broadcastEnable=1;
+    setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
+
 
     bzero((char *)&serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
@@ -143,13 +147,12 @@ static void * udp_broadcaster(void *arg) {
             tempo_send_buffer[0] = tempo_broadcast_message;
             
             n = sendto(
-                sockfd, tempo_send_buffer, n, 0, 
-                (struct sockaddr*)&broadcastaddr.sin_addr, 
-                sizeof(struct tempo_message)
+                sockfd, tempo_send_buffer, sizeof(struct tempo_message), 0, 
+                (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
             );
 
-            if(n == 0) {
-                fprintf(stdout, "Tempo broadcast failed\n");
+            if(n < 0) {
+                fprintf(stdout, "Tempo broadcast failed with code %i\n", n);
             }
 
             last_tempo_change = global_t_arg->current_tempo;
