@@ -43,6 +43,7 @@ void main() {
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
     tempo_calculator_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &global_t_arg);
+    udp_broadcaster_t_ret = pthread_create(&udp_broadcaster_thread, NULL, &udp_broadcaster, &global_t_arg);
 
     while(1) {};
 
@@ -87,10 +88,79 @@ void * buffer_watcher(void *arg) {
     }
 }
 
+static void * udp_broadcaster(void *arg) {
+
+    struct global_t_args *global_t_arg = arg;
+    struct shared_buffer_stats *buffer_stats = global_t_arg->shared_buffer_stats;
+    
+    int last_tempo_change = 0;
+    int sockfd, optval, n;
+
+    struct sockaddr_in serveraddr;
+    struct sockaddr_in broadcastaddr;
+
+    struct tempo_message *tempo_send_buffer = malloc(1);
+    struct tempo_message tempo_broadcast_message;
+
+    broadcastaddr.sin_family = AF_INET;
+    broadcastaddr.sin_port = BROADCAST_PORT;
+    inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
+
+    fprintf(stdout, "Broadcast address set to: ");
+    fprintf(stdout, inet_ntoa(broadcastaddr.sin_addr));
+    fprintf(stdout, "\n");
+
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if(sockfd < 0) {
+        fprintf(stdout, "Broadcaster socket init failure.\n");
+    }
+
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
+
+    bzero((char *)&serveraddr, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serveraddr.sin_port = htons((unsigned short)BROADCAST_PORT);
+
+    if(bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
+        fprintf(stdout, "Broadcaster: error binding to socket \n");
+    }
+    
+    while(1) {
+
+        //handle broadcasts based on state changes
+        if(last_tempo_change != global_t_arg->current_tempo) {
+
+            tempo_broadcast_message.message_type = 0;
+            tempo_broadcast_message.device_id = 0;
+            tempo_broadcast_message.bpm = global_t_arg->current_tempo;
+            tempo_broadcast_message.confidence = 100;
+            tempo_broadcast_message.timestamp = 0;
+
+            fprintf(stdout, "Broadcasting updated tempo %i\n", tempo_broadcast_message.bpm);
+
+            tempo_send_buffer[0] = tempo_broadcast_message;
+            
+            n = sendto(
+                sockfd, tempo_send_buffer, n, 0, 
+                (struct sockaddr*)&broadcastaddr.sin_addr, 
+                sizeof(struct tempo_message)
+            );
+
+            if(n == 0) {
+                fprintf(stdout, "Tempo broadcast failed\n");
+            }
+
+            last_tempo_change = global_t_arg->current_tempo;
+        }
+    }
+}
+
+
 static void * udp_listener(void *arg) {
 
     int *receive_buffer = malloc(RECEIVE_BUFFER_SIZE);
-    int *tempo_send_buffer = malloc(sizeof(struct tempo_message));
 
     struct global_t_args *global_t_arg = arg;
     struct shared_buffer_stats *buffer_stats = global_t_arg->shared_buffer_stats;
@@ -101,9 +171,7 @@ static void * udp_listener(void *arg) {
     int clientlen;
     struct sockaddr_in serveraddr;
     struct sockaddr_in clientaddr;
-    struct sockaddr_in broadcastaddr;
     struct hostent *hostp;
-    struct tempo_message tempo_broadcast_message;
     char *buf;
     char *hostaddrp;
     int optval;
@@ -111,15 +179,7 @@ static void * udp_listener(void *arg) {
 
     int msg_type;
     int client_address;
-    int last_tempo_change = 0;
-
-    broadcastaddr.sin_family = AF_INET;
-    broadcastaddr.sin_port = PORT;
-    inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
-
-    fprintf(stdout, "Broadcast address set to: ");
-    fprintf(stdout, inet_ntoa(broadcastaddr.sin_addr));
-    fprintf(stdout, "\n");
+    
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -135,7 +195,7 @@ static void * udp_listener(void *arg) {
     serveraddr.sin_port = htons((unsigned short)PORT);
 
     if(bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
-        fprintf(stdout, "error binding to socket \n");
+        fprintf(stdout, "UDP Listener: error binding to socket \n");
     }
 
     while(1) {
@@ -191,32 +251,6 @@ static void * udp_listener(void *arg) {
         }
 
         n = sendto(sockfd, receive_buffer, n, 0, (struct sockaddr*)&clientaddr, clientlen);
-
-        //handle broadcasts based on state changes
-
-
-
-        if(last_tempo_change != global_t_arg->current_tempo) {
-
-            tempo_broadcast_message.message_type = 0;
-            tempo_broadcast_message.device_id = 0;
-            tempo_broadcast_message.bpm = global_t_arg->current_tempo;
-            tempo_broadcast_message.confidence = 100;
-            tempo_broadcast_message.timestamp = 0;
-
-            fprintf(stdout, "Broadcasting updated tempo %i\n", tempo_broadcast_message.bpm);
-            
-            n = sendto(
-                sockfd, tempo_send_buffer, n, 0, 
-                (struct sockaddr*)&broadcastaddr.sin_addr, 
-                sizeof(struct tempo_message)
-            );
-
-            if(n == 0) {
-                fprintf(stdout, "Tempo broadcast failed\n");
-            }
-        }
-        // n = sendto(sockfd, broadcast_buffer, n, 0, inet_aton())
 
         if(n < 0){
             //do error stuff

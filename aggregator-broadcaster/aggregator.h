@@ -6,6 +6,8 @@
 #define TEMPO_BUFFER_SIZE 16 //Number of events
 
 #define BROADCAST_ADDRESS "192.168.1.255"
+#define BROADCAST_PORT 54555
+
 
 //Message types:
 #define TEMPO 0
@@ -67,6 +69,7 @@ int write_to_tempo_buffer(
     );
 
 static void * udp_listener(void *listener_arg);
+static void * udp_broadcaster(void *arg);
 void * buffer_watcher(void *arg);
 
 void kill_time(int time_ms);
