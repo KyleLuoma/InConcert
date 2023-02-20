@@ -35,14 +35,14 @@ void main() {
     
     init_buffer_stats(&buffer_stats);
 
-    struct udp_listener_t_arg listener_arg;
-    listener_arg.tempo_buffer = tempo_buffer;
-    listener_arg.event_buffer = event_buffer;
-    listener_arg.shared_buffer_stats = &buffer_stats;
+    struct global_t_args global_t_arg;
+    global_t_arg.tempo_buffer = tempo_buffer;
+    global_t_arg.event_buffer = event_buffer;
+    global_t_arg.shared_buffer_stats = &buffer_stats;
 
-    udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &listener_arg);
-    buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &listener_arg);
-    buffer_watcher_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &listener_arg);
+    udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
+    buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
+    tempo_calculator_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &global_t_arg);
 
     while(1) {};
 
@@ -67,7 +67,7 @@ void init_buffer_stats(void *buffer_stats) {
 //if an update occurred to buffers
 void * buffer_watcher(void *arg) {
 
-    struct udp_listener_t_arg *args = arg;
+    struct global_t_args *args = arg;
     int tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
     int tb_last_rollover = args->shared_buffer_stats->tempo_buffer_rollovers;
 
@@ -90,9 +90,10 @@ void * buffer_watcher(void *arg) {
 static void * udp_listener(void *arg) {
 
     int *receive_buffer = malloc(RECEIVE_BUFFER_SIZE);
+    int *tempo_send_buffer = malloc(sizeof(struct tempo_message));
 
-    struct udp_listener_t_arg *listener_arg = arg;
-    struct shared_buffer_stats *buffer_stats = listener_arg->shared_buffer_stats;
+    struct global_t_args *global_t_arg = arg;
+    struct shared_buffer_stats *buffer_stats = global_t_arg->shared_buffer_stats;
 
     fprintf(stdout, "\n UDP listener running \n");
     int sockfd;
@@ -100,7 +101,9 @@ static void * udp_listener(void *arg) {
     int clientlen;
     struct sockaddr_in serveraddr;
     struct sockaddr_in clientaddr;
+    struct sockaddr_in broadcastaddr;
     struct hostent *hostp;
+    struct tempo_message tempo_broadcast_message;
     char *buf;
     char *hostaddrp;
     int optval;
@@ -108,6 +111,15 @@ static void * udp_listener(void *arg) {
 
     int msg_type;
     int client_address;
+    int last_tempo_change = 0;
+
+    broadcastaddr.sin_family = AF_INET;
+    broadcastaddr.sin_port = PORT;
+    inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
+
+    fprintf(stdout, "Broadcast address set to: ");
+    fprintf(stdout, inet_ntoa(broadcastaddr.sin_addr));
+    fprintf(stdout, "\n");
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -152,14 +164,14 @@ static void * udp_listener(void *arg) {
             fprintf(stdout, hostaddrp);
 
             //How to read from buffer:
-            //htonl(*(listener_arg->rcv_buffer + i))
+            //htonl(*(global_t_arg->rcv_buffer + i))
 
             msg_type = htonl(*(receive_buffer));
 
             fprintf(stdout, "\nMessage type: %i\n", msg_type);
         }
 
-        //handle message types
+        //handle message receipts by type:
 
         if(msg_type == TEMPO) {
             fprintf(stdout, "Received tempo message!\n");
@@ -171,7 +183,7 @@ static void * udp_listener(void *arg) {
             msg.confidence = htonl(*(receive_buffer + 3));
             msg.timestamp = htonl(*(receive_buffer + 4));
 
-            write_to_tempo_buffer(listener_arg->tempo_buffer, msg, buffer_stats);
+            write_to_tempo_buffer(global_t_arg->tempo_buffer, msg, buffer_stats);
         } else if(msg_type == EVENT) {
             fprintf(stdout, "Received event message!\n");
         } else if(msg_type == TIME) {
@@ -179,6 +191,33 @@ static void * udp_listener(void *arg) {
         }
 
         n = sendto(sockfd, receive_buffer, n, 0, (struct sockaddr*)&clientaddr, clientlen);
+
+        //handle broadcasts based on state changes
+
+
+
+        if(last_tempo_change != global_t_arg->current_tempo) {
+
+            tempo_broadcast_message.message_type = 0;
+            tempo_broadcast_message.device_id = 0;
+            tempo_broadcast_message.bpm = global_t_arg->current_tempo;
+            tempo_broadcast_message.confidence = 100;
+            tempo_broadcast_message.timestamp = 0;
+
+            fprintf(stdout, "Broadcasting updated tempo %i\n", tempo_broadcast_message.bpm);
+            
+            n = sendto(
+                sockfd, tempo_send_buffer, n, 0, 
+                (struct sockaddr*)&broadcastaddr.sin_addr, 
+                sizeof(struct tempo_message)
+            );
+
+            if(n == 0) {
+                fprintf(stdout, "Tempo broadcast failed\n");
+            }
+        }
+        // n = sendto(sockfd, broadcast_buffer, n, 0, inet_aton())
+
         if(n < 0){
             //do error stuff
         }

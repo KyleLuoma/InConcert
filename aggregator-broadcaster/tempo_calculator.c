@@ -4,9 +4,9 @@
 #include "tempo_calculator.h"
 
 void * tempo_calculator(void *arg) {
-    struct udp_listener_t_arg * listener_arg = arg;
-    struct tempo_message * tempo_buffer = listener_arg->tempo_buffer;
-    struct shared_buffer_stats *stats = listener_arg->shared_buffer_stats;
+    struct global_t_args * global_t_arg = arg;
+    struct tempo_message * tempo_buffer = global_t_arg->tempo_buffer;
+    struct shared_buffer_stats *stats = global_t_arg->shared_buffer_stats;
     struct tempo_message temp_msg;
 
     int aggregate_tempo = DEFAULT_TEMPO_START;
@@ -31,7 +31,7 @@ void * tempo_calculator(void *arg) {
         aggregate_tempo = tempo_sum / stop_read;
         tempo_sum = 0;
         fprintf(stdout, "Updated average tempo to: %i\n", aggregate_tempo);
-
+        global_t_arg->current_tempo = aggregate_tempo;
         kill_time(5000000);
     }
 }

@@ -5,6 +5,8 @@
 #define EVENT_BUFFER_SIZE 16 //Number of events
 #define TEMPO_BUFFER_SIZE 16 //Number of events
 
+#define BROADCAST_ADDRESS "192.168.1.255"
+
 //Message types:
 #define TEMPO 0
 #define EVENT 1
@@ -36,10 +38,11 @@ struct time {
 };
 
 
-struct udp_listener_t_arg {
+struct global_t_args {
     struct tempo_message        *tempo_buffer;
     struct event_message        *event_buffer;
     struct shared_buffer_stats  *shared_buffer_stats;
+    int current_tempo;
 };
 
 struct shared_buffer_stats {
