@@ -5,12 +5,14 @@
 #include <WiFiUdp.h>
 #include <util.h>
 
-#define htons(x) ( ((x)<< 8 & 0xFF00) | \
-                   ((x)>> 8 & 0x00FF) )
+#define htonl(x) ( ((x)<<24 & 0xFF000000UL) | \
+                   ((x)<< 8 & 0x00FF0000UL) | \
+                   ((x)>> 8 & 0x0000FF00UL) | \
+                   ((x)>>24 & 0x000000FFUL) )
 
 int status = WL_IDLE_STATUS;
-char ssid[] = SECRET_ssid;        // your network SSID (name)
-char pass[] = SECRET_pass;    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "milehighsalsero";        // your network SSID (name)
+char pass[] = "BabyH3li098";    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 unsigned int localPort = 54555;      // local port to listen for UDP packets
@@ -24,6 +26,8 @@ const int AGG_PACKET_SIZE = 255;
 //struct tempo_message dance_rx_message;
 char dance_tx_message[255];
 unsigned char dance_int_tx[5];
+unsigned char dance_int2_tx[5];
+byte dance_tx_bytes[74];
 char dance_rx_message[255];
 
 WiFiUDP Udp;
@@ -88,22 +92,44 @@ void loop() {
   packetBuffer[13]  = 0x4E;
   packetBuffer[14]  = 49;
   packetBuffer[15]  = 52;
-
+*/
   dance_tx_message[0] = 0;
   dance_tx_message[1] = 1000;
   dance_tx_message[2] = 75;
   dance_tx_message[3] = 100;
   dance_tx_message[4] = 0;
-*/
-  dance_int_tx[0]=htons(0);
-  dance_int_tx[1]=htons(1000);
-  dance_int_tx[2]=htons(75);
-  dance_int_tx[3]=htons(100);
-  dance_int_tx[4]=htons(0);
-  
+
+  dance_int_tx[0]=htonl(0);
+  dance_int_tx[1]=htonl(1000);
+  dance_int_tx[2]=htonl(75);
+  dance_int_tx[3]=htonl(100);
+  dance_int_tx[4]=htonl(0);
+
+  dance_int2_tx[0]=0;
+  dance_int2_tx[1]=1000;
+  dance_int2_tx[2]=75;
+  dance_int2_tx[3]=100;
+  dance_int2_tx[4]=0;
+
+  for (int i=0; i<74; ++i) {
+      dance_tx_bytes[i] = 1;
+  }  
+  Udp.beginPacket(address, 54523); //AGG requests are to port 54534
+  Udp.write(dance_tx_bytes, AGG_PACKET_SIZE);
+  Udp.endPacket();
+
   Udp.beginPacket(address, 54523); //AGG requests are to port 54534
   Udp.write(dance_int_tx, AGG_PACKET_SIZE);
   Udp.endPacket();
+
+  Udp.beginPacket(address, 54523); //AGG requests are to port 54534
+  Udp.write(dance_int2_tx, AGG_PACKET_SIZE);
+  Udp.endPacket();
+
+  Udp.beginPacket(address, 54523); //AGG requests are to port 54534
+  Udp.write(dance_tx_message, AGG_PACKET_SIZE);
+  Udp.endPacket();
+
   }
 
 void printWifiStatus() {
