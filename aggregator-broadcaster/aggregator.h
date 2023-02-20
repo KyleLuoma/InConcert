@@ -1,4 +1,6 @@
 
+#include <stdint.h>
+
 #define PORT 54523
 #define RECEIVE_BUFFER_SIZE 1024 //bytes
 #define SEND_BUFFER_SIZE 1024 //bytes
@@ -17,10 +19,10 @@
 
 //Message structs:
 struct tempo_message {
-    int message_type;
-    int device_id;
-    int bpm;
-    int confidence;
+    uint32_t message_type;
+    uint32_t device_id;
+    uint32_t bpm;
+    uint32_t confidence;
     long long timestamp;
 };
 

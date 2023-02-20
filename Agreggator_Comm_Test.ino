@@ -25,7 +25,7 @@ const int AGG_PACKET_SIZE = 255;
 //struct tempo_message dance_tx_message;
 //struct tempo_message dance_rx_message;
 char dance_tx_message[255];
-unsigned char dance_int_tx[5];
+uint32_t dance_int_tx[5];
 unsigned char dance_int2_tx[5];
 byte dance_tx_bytes[74];
 char dance_rx_message[255];
@@ -119,7 +119,7 @@ void loop() {
   Udp.endPacket();
 
   Udp.beginPacket(address, 54523); //AGG requests are to port 54534
-  Udp.write(dance_int_tx, AGG_PACKET_SIZE);
+  Udp.write((uint8_t*)dance_int_tx, AGG_PACKET_SIZE);
   Udp.endPacket();
 
   Udp.beginPacket(address, 54523); //AGG requests are to port 54534

@@ -1,3 +1,6 @@
+
+#include <stdint.h>
+
 #include "tempo_calculator.h"
 #include "aggregator.h"
 
@@ -230,9 +233,6 @@ static void * udp_listener(void *arg) {
             //htonl(*(global_t_arg->rcv_buffer + i))
 
             msg_type = htonl(*(receive_buffer));
-            if(msg_type > 1000) {
-                msg_type = htons(msg_type);
-            }
 
             fprintf(stdout, "\nMessage type: %i\n", msg_type);
         }
@@ -244,10 +244,10 @@ static void * udp_listener(void *arg) {
             struct tempo_message msg;
 
             msg.message_type = msg_type;
-            msg.device_id = (int) htons(*(receive_buffer + 1));
-            msg.bpm = htons(*(receive_buffer + 2));
-            msg.confidence = htonl(*(receive_buffer + 3));
-            msg.timestamp = htonl(*(receive_buffer + 4));
+            msg.device_id = ntohl(*(receive_buffer + 1));
+            msg.bpm = ntohl(*(receive_buffer + 2));
+            msg.confidence = ntohl(*(receive_buffer + 3));
+            msg.timestamp = ntohl(*(receive_buffer + 4));
 
             write_to_tempo_buffer(global_t_arg->tempo_buffer, msg, buffer_stats);
         } else if(msg_type == EVENT) {
