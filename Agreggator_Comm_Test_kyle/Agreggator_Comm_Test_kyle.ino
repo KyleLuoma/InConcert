@@ -1,12 +1,17 @@
 #include "aggregator.h" 
 
 #include <SPI.h>
-#include <WiFi.h>
+#include <WiFi101.h>
 #include <WiFiUdp.h>
 //#include <util.h>
 
 #define htons(x) ( ((x)<< 8 & 0xFF00) | \
                    ((x)>> 8 & 0x00FF) )
+
+#define htonl(x) ( ((x)<<24 & 0xFF000000UL) | \
+                   ((x)<< 8 & 0x00FF0000UL) | \
+                   ((x)>> 8 & 0x0000FF00UL) | \
+                   ((x)>>24 & 0x000000FFUL) )
 
 
 int status = WL_IDLE_STATUS;
@@ -26,7 +31,7 @@ const int AGG_PACKET_SIZE = 255;
 char dance_tx_message[255];
 // unsigned char dance_int_tx[5];
 
-int dance_int_tx[5];
+uint32_t dance_int_tx[5];
 
 char dance_rx_message[255];
 
@@ -59,10 +64,10 @@ void setup() {
     Serial.print(WiFi.RSSI(thisNet));
   }
 
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("Communication with WiFi module failed!");
-    while (true);
-  }
+  // if (WiFi.status() == WL_NO_SHIELD) {
+  //   Serial.println("Communication with WiFi module failed!");
+  //   while (true);
+  // }
 
 //  String fv = WiFi.firmwareVersion();
 //
@@ -119,11 +124,12 @@ void loop() {
   dance_tx_message[3] = 100;
   dance_tx_message[4] = 0;
 */
-  dance_int_tx[0]=htons(0);
-  dance_int_tx[1]=htons(1000);
-  dance_int_tx[2]=htons(75);
-  dance_int_tx[3]=htons(100);
-  dance_int_tx[4]=htons(0);
+
+  dance_int_tx[0]=htonl(0);
+  dance_int_tx[1]=htonl(1000);
+  dance_int_tx[2]=htonl(75);
+  dance_int_tx[3]=htonl(100);
+  dance_int_tx[4]=htonl(0);
   
   Udp.beginPacket(address, 54523); //AGG requests are to port 54534
   Udp.write((uint8_t*)dance_int_tx, AGG_PACKET_SIZE);
