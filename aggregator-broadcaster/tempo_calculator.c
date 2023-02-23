@@ -28,7 +28,7 @@ void * tempo_calculator(void *arg) {
             temp_msg = tempo_buffer[i];
             tempo_sum += temp_msg.bpm;
         }
-        aggregate_tempo = tempo_sum / stop_read;
+        aggregate_tempo = tempo_sum / (stop_read + 1);
         tempo_sum = 0;
         fprintf(stdout, "Updated average tempo to: %i\n", aggregate_tempo);
         global_t_arg->current_tempo = aggregate_tempo;
