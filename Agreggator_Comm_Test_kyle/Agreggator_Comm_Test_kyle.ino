@@ -15,8 +15,8 @@
 
 
 int status = WL_IDLE_STATUS;
-char ssid[] = "CLETUSIOT";        // your network SSID (name)
-char pass[] = "cloudyspider725";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "";        // your network SSID (name)
+char pass[] = "";    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 unsigned int localPort = 54555;      // local port to listen for UDP packets

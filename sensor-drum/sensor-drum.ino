@@ -1,4 +1,5 @@
 #include <Adafruit_ADS1X15.h>
+#include <SPI.h>
 #include <WiFi101.h>
 #include <WiFiUdp.h>
 #include <RTCZero.h>
@@ -17,6 +18,8 @@
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
 #define INPUT_THRESHOLD 50 //Amount of signal to increase above idle to register as a hit
 
+// #define SERIAL_PRINT
+
 Adafruit_ADS1115 ads;
 
 int16_t snare, cymbal, bass, tom; //Use for storing sample inputs
@@ -25,11 +28,13 @@ const int ledPin = LED_BUILTIN;
 int led_state = LOW;
 int has_wifi = 1;
 int wifi_status;
+int i;
 
 uint32_t tempo_msg_buffer[5];
 
 IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
 WiFiUDP Udp;
+const int AGG_PACKET_SIZE = 255;
 
 void setup() {
   Serial.begin(9600);
@@ -46,7 +51,7 @@ void setup() {
 
   if(has_wifi == 1){
     Serial.print("Connecting to aggregator.\n");
-    while(wifi_stats != WL_CONNECTED) {
+    while(wifi_status != WL_CONNECTED) {
       wifi_status = WiFi.begin(SSID, PW);
       for(i = 0; i < 10; i++){ //Flash LED asymmetrically for ten seconds while we wait to connect
         digitalWrite(ledPin, HIGH);
@@ -59,6 +64,8 @@ void setup() {
         delay(100);
       }
     }
+    Serial.println("\nStarting connection to server...");
+    Udp.begin(SEND_PORT); 
   }
 
   pinMode(ledPin, OUTPUT);
@@ -123,23 +130,28 @@ unsigned long sendAGGpacket(IPAddress& address) {
   Serial.print("Sending Packet to Agg Server ");
   Serial.println(AGGServer);
 
+  memset(tempo_msg_buffer, 0, sizeof(struct tempo_message));
+
   tempo_msg_buffer[0] = htonl(0);            //message type
   tempo_msg_buffer[1] = htonl(DEVICE_ID);    //device id
   tempo_msg_buffer[2] = htonl(120);          //tempo
   tempo_msg_buffer[3] = htonl(94);           //confidence
   tempo_msg_buffer[5] = htonl(10001);        //timestamp
+
   Udp.beginPacket(address, SEND_PORT); //AGG requests are to port 54534
   Udp.write((uint8_t*)tempo_msg_buffer, sizeof(struct tempo_message));
   Udp.endPacket();
 }
-
+unsigned int loopcounter = 0;
 void loop() {
   loop_start_time = micros();
 
   snare = ads.readADC_SingleEnded(SNARE);
   next_sample = loop_start_time + 2000;
 
-  sendAGGpacket(AGGServer);
+  if(has_wifi == 1 && loopcounter % 125 == 0){
+    sendAGGpacket(AGGServer);
+  }
 
   while(micros() < next_sample){};
   bass = ads.readADC_SingleEnded(BASS);
@@ -161,10 +173,13 @@ void loop() {
   }
   digitalWrite(ledPin, led_state);
 
+#ifdef SERIAL_PRINT  
   Serial.print(snare); Serial.print(", ");
   Serial.print(bass); Serial.print(", ");
   Serial.print(cymbal); Serial.print(", ");
   Serial.print(tom); Serial.print("\n");
+#endif
 
+  loopcounter++;
   while(micros() < next_sample){};
 }
