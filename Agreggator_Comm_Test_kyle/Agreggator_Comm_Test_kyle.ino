@@ -132,7 +132,7 @@ void loop() {
   dance_int_tx[4]=htonl(0);
   
   Udp.beginPacket(address, 54523); //AGG requests are to port 54534
-  Udp.write((uint8_t*)dance_int_tx, AGG_PACKET_SIZE);
+  Udp.write((uint8_t*)dance_int_tx, sizeof(struct tempo_message));
   Udp.endPacket();
   }
 
