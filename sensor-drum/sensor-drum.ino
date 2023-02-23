@@ -2,6 +2,9 @@
 #include <WiFi101.h>
 #include <RTCZero.h>
 
+#include "wifi-info.h"
+#include "inconcert-communication.h"
+
 #define SNARE 0
 #define BASS 1
 #define CYMBAL 2
@@ -36,7 +39,7 @@ void setup() {
   if(has_wifi == 1){
     Serial.print("Connecting to aggregator.\n");
     while(wifi_stats != WL_CONNECTED) {
-      wifi_status = WiFi.begin("INCONCERT", "itgoesto11");
+      wifi_status = WiFi.begin(SSID, PW);
       for(i = 0; i < 10; i++){ //Flash LED asymmetrically for ten seconds while we wait to connect
         digitalWrite(ledPin, HIGH);
         delay(500);
@@ -113,15 +116,15 @@ void loop() {
   snare = ads.readADC_SingleEnded(SNARE);
   next_sample = loop_start_time + 2000;
 
-  while(micros < next_sample){};
+  while(micros() < next_sample){};
   bass = ads.readADC_SingleEnded(BASS);
   next_sample = loop_start_time + 4000;
 
-  while(micros < next_sample){};
+  while(micros() < next_sample){};
   cymbal = ads.readADC_SingleEnded(CYMBAL);
   next_sample = loop_start_time + 6000;
 
-  while(micros < next_sample){};
+  while(micros() < next_sample){};
   tom = ads.readADC_SingleEnded(TOM);
   next_sample = loop_start_time + 8000;
 
@@ -138,5 +141,5 @@ void loop() {
   Serial.print(cymbal); Serial.print(", ");
   Serial.print(tom); Serial.print("\n");
 
-  while(micros < next_sample){};
+  while(micros() < next_sample){};
 }
