@@ -1,5 +1,6 @@
 
 #include <stdint.h>
+#include "inconcert-communication.h"
 
 #define PORT 54523
 #define RECEIVE_BUFFER_SIZE 1024 //bytes
@@ -11,42 +12,15 @@
 #define BROADCAST_PORT 54555
 
 
-//Message types:
-#define TEMPO 0
-#define EVENT 1
-#define TIME  2
-
-
-//Message structs:
-struct tempo_message {
-    uint32_t message_type;
-    uint32_t device_id;
-    uint32_t bpm;
-    uint32_t confidence;
-    long long timestamp;
-};
-
-struct event_message {
-    int message_type;
-    int device_id;
-    int event_type;
-    long long timestamp;
-    int num_params;
-    int *params;
-};
-
-struct time {
-    int message_type;
-    int device_id;
-    long long timestamp;
-};
-
-
 struct global_t_args {
     struct tempo_message        *tempo_buffer;
     struct event_message        *event_buffer;
     struct shared_buffer_stats  *shared_buffer_stats;
-    int current_tempo;
+    uint32_t current_tempo;
+    uint32_t beat_signature_L;
+    uint32_t beat_signature_R;
+    uint32_t measure;
+    uint32_t beat;
 };
 
 struct shared_buffer_stats {

@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "tempo_calculator.h"
+#include "beat-master.h"
 #include "aggregator.h"
 
 #include <stdio.h>
@@ -23,11 +24,13 @@ void main() {
 
     pthread_t udp_listener_thread, udp_broadcaster_thread, 
               tempo_calculator_thread, event_manager_thread, 
-              screen_display_thread, buffer_watcher_thread;
+              screen_display_thread, buffer_watcher_thread, 
+              keep_rhythm_thread;
 
     int udp_listener_t_ret, udp_broadcaster_t_ret,
         tempo_calculator_t_ret, event_manager_t_ret,
-        screen_display_t_ret, buffer_watcher_t_ret;
+        screen_display_t_ret, buffer_watcher_t_ret
+        keep_rhythm_t_ret;
 
     
     int *send_buffer = malloc(SEND_BUFFER_SIZE);
@@ -47,6 +50,7 @@ void main() {
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
     tempo_calculator_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &global_t_arg);
     udp_broadcaster_t_ret = pthread_create(&udp_broadcaster_thread, NULL, &udp_broadcaster, &global_t_arg);
+    keep_rhythm_t_ret = pthread_create(&keep_rhythm_thread, NULL, &keep_rhythm, &global_t_arg);
 
     while(1) {};
 
