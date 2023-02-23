@@ -1,5 +1,6 @@
 #include <Adafruit_ADS1X15.h>
 #include <WiFi101.h>
+#include <WiFiUdp.h>
 #include <RTCZero.h>
 
 #include "wifi-info.h"
@@ -9,6 +10,8 @@
 #define BASS 1
 #define CYMBAL 2
 #define TOM 3
+
+#define DEVICE_ID 1001
 
 #define SAMPLE_INTERVAL 2  //MS between sensor samples (x4 samples)
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
@@ -22,6 +25,11 @@ const int ledPin = LED_BUILTIN;
 int led_state = LOW;
 int has_wifi = 1;
 int wifi_status;
+
+uint32_t tempo_msg_buffer[5];
+
+IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
+WiFiUDP Udp;
 
 void setup() {
   Serial.begin(9600);
@@ -110,11 +118,28 @@ void setup() {
 
 unsigned long loop_start_time;
 unsigned long next_sample;
+
+unsigned long sendAGGpacket(IPAddress& address) {
+  Serial.print("Sending Packet to Agg Server ");
+  Serial.println(AGGServer);
+
+  tempo_msg_buffer[0] = htonl(0);            //message type
+  tempo_msg_buffer[1] = htonl(DEVICE_ID);    //device id
+  tempo_msg_buffer[2] = htonl(120);          //tempo
+  tempo_msg_buffer[3] = htonl(94);           //confidence
+  tempo_msg_buffer[5] = htonl(10001);        //timestamp
+  Udp.beginPacket(address, SEND_PORT); //AGG requests are to port 54534
+  Udp.write((uint8_t*)tempo_msg_buffer, sizeof(struct tempo_message));
+  Udp.endPacket();
+}
+
 void loop() {
   loop_start_time = micros();
 
   snare = ads.readADC_SingleEnded(SNARE);
   next_sample = loop_start_time + 2000;
+
+  sendAGGpacket(AGGServer);
 
   while(micros() < next_sample){};
   bass = ads.readADC_SingleEnded(BASS);
