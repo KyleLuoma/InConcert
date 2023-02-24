@@ -36,8 +36,8 @@ struct event_message {
     uint32_t event_type;
     uint32_t measure;
     uint32_t beat;
-    uint32_t num_params;
-    uint32_t *params;
+    uint32_t num_used_params; //1-10
+    uint32_t params[10];
 };
 
 struct time_message {
