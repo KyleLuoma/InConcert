@@ -25,52 +25,52 @@ void * keep_rhythm(void *args) {
     fprintf(stdout, "Calculating next beat ms\n");
 
     //Set to default 1 BPS until we get tempo data
-    interval_ns = 1000000000U;
+    int default_bpm = 120;
+    interval_ns = 60000000000U / default_bpm;
 
     clock_gettime(CLOCK_REALTIME, &ts);
     cur_sec = ts.tv_sec;
     cur_ns = ts.tv_nsec;
 
-    if(cur_sec + interval_ns > 1000000000U){
+    if(cur_ns + interval_ns > 1000000000U){
         next_sec = cur_sec + 1;
-        next_ns = (cur_sec + interval_ns) - 1000000000U;
+        next_ns = (cur_ns + interval_ns) - 1000000000U;
     } else {
+        next_sec = cur_sec;
         next_ns = ts.tv_nsec + interval_ns;
-    }
+    }  
     
-    next_sec = ts.tv_sec;
-    
-    
-    fprintf(stdout, "Next beat will occur at %i ms\n", next_beat_ms);
+    fprintf(stdout, "Next beat will occur at %i ns\n", next_ns);
 
     while(1) {
         //Update ms per beat
-        clock_gettime(CLOCK_REALTIME, &ts);
-        current_time = (uint64_t)ts.tv_sec * 1000000000U + (uint64_t)ts.tv_nsec;
-        current_time_ms = ((double)current_time) / 1000000;
+        while(cur_sec < next_sec || cur_ns < next_ns) {
+            clock_gettime(CLOCK_REALTIME, &ts);
+            cur_sec = ts.tv_sec;
+            cur_ns = ts.tv_nsec;
+        }
 
-        if(global_t_arg->current_tempo > 30) {
-            ms_per_beat = 60000 / (double)global_t_arg->current_tempo;
+        if(cur_ns + interval_ns > 1000000000U){
+            next_sec = cur_sec + 1;
+            next_ns = (next_ns + interval_ns) - 1000000000U;
         } else {
-            ms_per_beat = 60000 / 60;
-        }
+            next_sec = cur_sec;
+            next_ns = next_ns + interval_ns;
+        }  
 
-        if(current_time_ms > next_beat_ms){
-            temp_beat_ms = next_beat_ms;
-            next_beat_ms = next_beat_ms + ms_per_beat;
-            last_beat_ms= temp_beat_ms;
-            fprintf(
-                stdout, "B: %i, clock: %f, beat_goal: %f, delta: %f, next: %f, interval: %f\n", 
-                global_t_arg->beat, current_time_ms, last_beat_ms, (current_time_ms - last_beat_ms),
-                next_beat_ms, ms_per_beat
-            );
-            global_t_arg->beat++;
-        }
-
-        if(global_t_arg->beat > bs_R) {
+        if(global_t_arg->beat >= bs_R) {
             global_t_arg->beat = 1;
             global_t_arg->measure++;
             fprintf(stdout, "M: %i\n", global_t_arg->measure);
+        } else {
+            global_t_arg->beat++;
+        }
+        fprintf(stdout, "B: %i\n", global_t_arg->beat);
+        
+        if(global_t_arg->current_tempo > 30) {
+            interval_ns = 60000000000U / global_t_arg->current_tempo;
+        } else {
+            interval_ns = 60000000000U / default_bpm;
         }
     }
 }
