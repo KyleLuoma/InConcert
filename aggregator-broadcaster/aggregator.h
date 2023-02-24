@@ -8,7 +8,6 @@
 #define EVENT_BUFFER_SIZE 16 //Number of events
 #define TEMPO_BUFFER_SIZE 16 //Number of events
 
-#define BROADCAST_ADDRESS "172.31.22.255"
 #define BROADCAST_PORT 54555
 
 

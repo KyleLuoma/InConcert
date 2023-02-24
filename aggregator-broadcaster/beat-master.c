@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+// #define VERBOSE
+
 uint32_t bs_L, bs_R;
 double ms_per_beat;
 
@@ -61,11 +63,15 @@ void * keep_rhythm(void *args) {
         if(global_t_arg->beat >= bs_R) {
             global_t_arg->beat = 1;
             global_t_arg->measure++;
+#ifdef VERBOSE
             fprintf(stdout, "M: %i\n", global_t_arg->measure);
+#endif
         } else {
             global_t_arg->beat++;
         }
+#ifdef VERBOSE
         fprintf(stdout, "B: %i\n", global_t_arg->beat);
+#endif
         
         if(global_t_arg->current_tempo > 30) {
             interval_ns = 60000000000U / global_t_arg->current_tempo;
