@@ -3,6 +3,8 @@
 #include "aggregator.h"
 #include "tempo_calculator.h"
 
+#define VERBOSE
+
 void * tempo_calculator(void *arg) {
     struct global_t_args * global_t_arg = arg;
     struct tempo_message * tempo_buffer = global_t_arg->tempo_buffer;
@@ -22,15 +24,18 @@ void * tempo_calculator(void *arg) {
         } else {
             stop_read = TEMPO_BUFFER_SIZE;
         }
-
+#ifdef VERBOSE
         fprintf(stdout, "Updating tempo...\n");
+#endif
         for(int i = 0; i <= stop_read; i++) {
             temp_msg = tempo_buffer[i];
             tempo_sum += temp_msg.bpm;
         }
         aggregate_tempo = tempo_sum / (stop_read + 1);
         tempo_sum = 0;
+#ifdef VERBOSE
         fprintf(stdout, "Updated average tempo to: %i\n", aggregate_tempo);
+#endif
         global_t_arg->current_tempo = aggregate_tempo;
         kill_time(5000000);
     }

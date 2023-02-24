@@ -45,6 +45,10 @@ void main() {
     global_t_arg.tempo_buffer = tempo_buffer;
     global_t_arg.event_buffer = event_buffer;
     global_t_arg.shared_buffer_stats = &buffer_stats;
+    global_t_arg.measure = 0;
+    global_t_arg.beat = 0;
+    global_t_arg.beat_signature_L = 4;
+    global_t_arg.beat_signature_R = 4;
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
@@ -83,8 +87,8 @@ void * buffer_watcher(void *arg) {
         if(tb_last_write < args->shared_buffer_stats->tempo_buffer_last_write_ix) {
             fprintf(stdout, "buffer_watcher detected a tempo buffer update with payload:\n");
             struct tempo_message msg = args->tempo_buffer[args->shared_buffer_stats->tempo_buffer_last_write_ix];
-            fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, timestamp: %lld\n", 
-                msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.timestamp
+            fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, measure: %lld\n", 
+                msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.measure
             );
             tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
         }
@@ -154,25 +158,29 @@ static void * udp_broadcaster(void *arg) {
         //handle broadcasts based on state changes
 
         //First check for a new beat and broadcast
-        if(last_beat < global_t_arg->beat){
+        if(last_measure < global_t_arg->measure){
+
             time_broadcast_message.measure = global_t_arg->measure;
             time_broadcast_message.beat = global_t_arg->beat;
-            time_broadcast_message.beat_inverval = global_t_arg->beat_interval;
+            time_broadcast_message.beat_interval = global_t_arg->beat_interval;
+
             time_send_buffer[0] = time_broadcast_message;
+
             n = sendto(
-                sockfd, time_send_buffer, sizeof(struct time_message), 0,
+                sockfd, time_send_buffer, sizeof(struct time_message), 0, 
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
             );
-            if(n == 1){
+            if(n > 0){
                 fprintf(stdout, 
-                        "Time broadcast complete for measure %i, beat %i\n", 
-                        time_broadcast_message.measure, time_broadcast_message.beat
+                        "Time broadcast complete for measure %i, beat %i, chars sent: %i\n", 
+                        time_broadcast_message.measure, time_broadcast_message.beat, n
                         );
             } else {
-                fprintf(stdout, "Unable to send time message %i %i\n",
-                        time_broadcast_message.measure, time_broadcast_message.beat
+                fprintf(stdout, "Unable to send time message %i %i, failure with code %i\n",
+                        time_broadcast_message.measure, time_broadcast_message.beat, n
                 );
             }
+            last_measure = global_t_arg->measure;
         }
         //Next check for tempo change (should be lower priority)       
         if(last_tempo_change != global_t_arg->current_tempo) {
@@ -286,7 +294,8 @@ static void * udp_listener(void *arg) {
             msg.device_id = ntohl(*(receive_buffer + 1));
             msg.bpm = ntohl(*(receive_buffer + 2));
             msg.confidence = ntohl(*(receive_buffer + 3));
-            msg.timestamp = ntohl(*(receive_buffer + 4));
+            msg.measure = ntohl(*(receive_buffer + 4));
+            msg.beat = ntohl(*(receive_buffer + 5));
 
             write_to_tempo_buffer(global_t_arg->tempo_buffer, msg, buffer_stats);
         } else if(msg_type == EVENT) {
@@ -325,12 +334,13 @@ int write_to_tempo_buffer(void *tempo_buffer, struct tempo_message message, void
     }
 
     fprintf(stdout, "Writing tempo to buffer\n");
-    fprintf(stdout, "Message type: %i, Device ID: %i, BPM: %i, Confidence: %i, timestamp: %llu\n", 
+    fprintf(stdout, "Message type: %i, Device ID: %i, BPM: %i, Confidence: %i, measure: %i, beat: %i\n", 
         message.message_type,
         message.device_id,
         message.bpm,
         message.confidence,
-        message.timestamp
+        message.measure,
+        message.beat
     );
     
     stats->tempo_buffer_last_write_ix++;
