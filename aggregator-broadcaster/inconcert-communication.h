@@ -36,11 +36,12 @@ struct event_message {
     uint32_t *params;
 };
 
-struct time {
+struct time_message {
     uint32_t message_type;
     uint32_t device_id;
     uint32_t beat_signature_L;
     uint32_t beat_signature_R;
     uint32_t measure;
     uint32_t beat; //1 ... beat_signature_R values
+    uint32_t beat_interval; //ms between beats
 };

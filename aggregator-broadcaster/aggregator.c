@@ -109,6 +109,14 @@ static void * udp_broadcaster(void *arg) {
     struct tempo_message *tempo_send_buffer = malloc(1);
     struct tempo_message tempo_broadcast_message;
 
+    struct time_message *time_send_buffer = malloc(1);
+    struct time_message time_broadcast_message;
+
+    time_broadcast_message.message_type = TIME;
+    time_broadcast_message.device_id = 0;
+    time_broadcast_message.beat_signature_L = 4;
+    time_broadcast_message.beat_signature_R = 4;
+
     broadcastaddr.sin_family = AF_INET;
     broadcastaddr.sin_port = BROADCAST_PORT;
     broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
@@ -137,13 +145,39 @@ static void * udp_broadcaster(void *arg) {
     if(bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0) {
         fprintf(stdout, "Broadcaster: error binding to socket \n");
     }
+
+    uint32_t last_beat = 0;
+    uint32_t last_measure = 0;
     
     while(1) {
 
         //handle broadcasts based on state changes
+
+        //First check for a new beat and broadcast
+        if(last_beat < global_t_arg->beat){
+            time_broadcast_message.measure = global_t_arg->measure;
+            time_broadcast_message.beat = global_t_arg->beat;
+            time_broadcast_messate.beat_inverval = global_t_arg->beat_interval;
+            time_send_buffer[0] = time_broadcast_message;
+            n = sendto(
+                sockfd, time_send_buffer, sizeof(struct time_message), 0,
+                (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
+            );
+            if(n == 1){
+                fprintf(stdout, 
+                        "Time broadcast complete for measure %i, beat %i\n", 
+                        time_broadcast_message.measure, time_broadcast_message.beat
+                        );
+            } else {
+                fprintf(stdout, "Unable to send time message %i %i\n",
+                        time_broadcast_message.measure, time_broadcast_message.beat
+                );
+            }
+        }
+        //Next check for tempo change (should be lower priority)       
         if(last_tempo_change != global_t_arg->current_tempo) {
 
-            tempo_broadcast_message.message_type = 0;
+            tempo_broadcast_message.message_type = TEMPO;
             tempo_broadcast_message.device_id = 0;
             tempo_broadcast_message.bpm = global_t_arg->current_tempo;
             tempo_broadcast_message.confidence = 100;

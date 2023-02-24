@@ -21,6 +21,7 @@ struct global_t_args {
     uint32_t beat_signature_R;
     uint32_t measure;
     uint32_t beat;
+    uint32_t beat_interval;
 };
 
 struct shared_buffer_stats {
