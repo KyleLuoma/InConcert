@@ -29,7 +29,7 @@ void main() {
 
     int udp_listener_t_ret, udp_broadcaster_t_ret,
         tempo_calculator_t_ret, event_manager_t_ret,
-        screen_display_t_ret, buffer_watcher_t_ret
+        screen_display_t_ret, buffer_watcher_t_ret,
         keep_rhythm_t_ret;
 
     
@@ -157,7 +157,7 @@ static void * udp_broadcaster(void *arg) {
         if(last_beat < global_t_arg->beat){
             time_broadcast_message.measure = global_t_arg->measure;
             time_broadcast_message.beat = global_t_arg->beat;
-            time_broadcast_messate.beat_inverval = global_t_arg->beat_interval;
+            time_broadcast_message.beat_inverval = global_t_arg->beat_interval;
             time_send_buffer[0] = time_broadcast_message;
             n = sendto(
                 sockfd, time_send_buffer, sizeof(struct time_message), 0,
@@ -181,7 +181,8 @@ static void * udp_broadcaster(void *arg) {
             tempo_broadcast_message.device_id = 0;
             tempo_broadcast_message.bpm = global_t_arg->current_tempo;
             tempo_broadcast_message.confidence = 100;
-            tempo_broadcast_message.timestamp = 0;
+            tempo_broadcast_message.measure = global_t_arg->measure;
+            tempo_broadcast_message.beat = global_t_arg->beat;
 
             fprintf(stdout, "Broadcasting updated tempo %i\n", tempo_broadcast_message.bpm);
 

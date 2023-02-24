@@ -1,5 +1,8 @@
 #include <stdint.h>
 
+// #define INCLUDE_HTONX
+
+#ifdef INCLUDE_HTONX
 #define htons(x) ( ((x)<< 8 & 0xFF00) | \
                    ((x)>> 8 & 0x00FF) )
 
@@ -7,6 +10,7 @@
                    ((x)<< 8 & 0x00FF0000UL) | \
                    ((x)>> 8 & 0x0000FF00UL) | \
                    ((x)>>24 & 0x000000FFUL) )
+#endif
 
 
 #define SEND_PORT 54523
