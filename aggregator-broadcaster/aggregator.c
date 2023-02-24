@@ -158,7 +158,7 @@ static void * udp_broadcaster(void *arg) {
         //handle broadcasts based on state changes
 
         //First check for a new beat and broadcast
-        if(last_measure < global_t_arg->measure){
+        if(last_beat != global_t_arg->beat){
 
             time_broadcast_message.measure = global_t_arg->measure;
             time_broadcast_message.beat = global_t_arg->beat;
@@ -180,7 +180,7 @@ static void * udp_broadcaster(void *arg) {
                         time_broadcast_message.measure, time_broadcast_message.beat, n
                 );
             }
-            last_measure = global_t_arg->measure;
+            last_beat = global_t_arg->beat;
         }
         //Next check for tempo change (should be lower priority)       
         if(last_tempo_change != global_t_arg->current_tempo) {
