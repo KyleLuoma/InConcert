@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <time.h>
+#include <sched.h>
 
 
 
@@ -54,6 +55,13 @@ void main() {
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
     tempo_calculator_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &global_t_arg);
     udp_broadcaster_t_ret = pthread_create(&udp_broadcaster_thread, NULL, &udp_broadcaster, &global_t_arg);
+
+    pthread_attr_t keep_rhythm_t_attr;
+    struct sched_param kr_param;
+    keep_rhythm_t_ret = pthread_attr_init(&keep_rhythm_t_attr);
+    keep_rhythm_t_ret = pthread_attr_getschedparam(&keep_rhythm_t_attr, &kr_param);
+    kr_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    keep_rhythm_t_ret = pthread_attr_setschedparam (&keep_rhythm_t_attr, &kr_param);
     keep_rhythm_t_ret = pthread_create(&keep_rhythm_thread, NULL, &keep_rhythm, &global_t_arg);
 
     while(1) {};
@@ -175,10 +183,10 @@ static void * udp_broadcaster(void *arg) {
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
             );
             if(n > 0){
-                fprintf(stdout, 
-                        "Time broadcast complete for measure %i, beat %i, chars sent: %i\n", 
-                        time_broadcast_message.measure, time_broadcast_message.beat, n
-                        );
+                // fprintf(stdout, 
+                //         "Time broadcast complete for measure %i, beat %i, chars sent: %i\n", 
+                //         time_broadcast_message.measure, time_broadcast_message.beat, n
+                //         );
             } else {
                 fprintf(stdout, "Unable to send time message %i %i, failure with code %i\n",
                         time_broadcast_message.measure, time_broadcast_message.beat, n
@@ -223,7 +231,7 @@ static void * udp_broadcaster(void *arg) {
                     );
                 }
             }
-            global_t_arg->shared_buffer_stats->event_buffer_last_read_ix = event_buffer_loc;
+            global_t_arg->shared_buffer_stats->event_buffer_last_read_ix = last_event_write;
             last_event_rollover = global_t_arg->shared_buffer_stats->event_buffer_rollovers;
         }  
         //Then check for tempo change (should be lower priority)       

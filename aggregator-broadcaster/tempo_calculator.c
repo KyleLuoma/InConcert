@@ -3,7 +3,7 @@
 #include "aggregator.h"
 #include "tempo_calculator.h"
 
-#define VERBOSE
+// #define VERBOSE
 
 void * tempo_calculator(void *arg) {
     struct global_t_args * global_t_arg = arg;
