@@ -8,7 +8,6 @@
 #define EVENT_BUFFER_SIZE 16 //Number of events
 #define TEMPO_BUFFER_SIZE 16 //Number of events
 
-#define BROADCAST_ADDRESS "172.31.22.255"
 #define BROADCAST_PORT 54555
 
 
@@ -38,15 +37,38 @@ struct shared_buffer_stats {
 
 
 void main();
+
+//Initializes buffer stats to 0 values
+//Args: void *buffer_stats - pointer to struct shared_buffer_stats
 void init_buffer_stats(void *buffer_stats);
+
+// Writes a tempo message to the tempo buffer and updates
+// buffer stats in global_t_args
 int write_to_tempo_buffer(
     void *tempo_buffer,
     struct tempo_message message,
     void *buffer_stats
     );
 
+// Writes an event message to the event buffer and updates
+// buffer stats in global_t_args
+int write_to_event_buffer(
+    void *event_buffer,
+    struct event_message message,
+    void *buffer_stats
+);
+
+// Monitors inbound UDP socket and calls buffer
+// write functions to store messages
 static void * udp_listener(void *listener_arg);
+
+// Monitors global_t_args and broadcasts event, 
+// tempo, and time messages based on state changes
 static void * udp_broadcaster(void *arg);
+
+// Debug function to observe changes to buffer
+// states and print observations to console
 void * buffer_watcher(void *arg);
 
+// Simple delay function that uses clock()
 void kill_time(int time_ms);

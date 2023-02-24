@@ -1,1 +1,1 @@
-void keep_rhythm(void *args);
+void * keep_rhythm(void *args);

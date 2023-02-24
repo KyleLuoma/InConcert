@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <time.h>
+#include <sched.h>
 
 
 
@@ -45,11 +46,22 @@ void main() {
     global_t_arg.tempo_buffer = tempo_buffer;
     global_t_arg.event_buffer = event_buffer;
     global_t_arg.shared_buffer_stats = &buffer_stats;
+    global_t_arg.measure = 0;
+    global_t_arg.beat = 0;
+    global_t_arg.beat_signature_L = 4;
+    global_t_arg.beat_signature_R = 4;
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
     tempo_calculator_t_ret = pthread_create(&tempo_calculator_thread, NULL, &tempo_calculator, &global_t_arg);
     udp_broadcaster_t_ret = pthread_create(&udp_broadcaster_thread, NULL, &udp_broadcaster, &global_t_arg);
+
+    pthread_attr_t keep_rhythm_t_attr;
+    struct sched_param kr_param;
+    keep_rhythm_t_ret = pthread_attr_init(&keep_rhythm_t_attr);
+    keep_rhythm_t_ret = pthread_attr_getschedparam(&keep_rhythm_t_attr, &kr_param);
+    kr_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    keep_rhythm_t_ret = pthread_attr_setschedparam (&keep_rhythm_t_attr, &kr_param);
     keep_rhythm_t_ret = pthread_create(&keep_rhythm_thread, NULL, &keep_rhythm, &global_t_arg);
 
     while(1) {};
@@ -83,8 +95,8 @@ void * buffer_watcher(void *arg) {
         if(tb_last_write < args->shared_buffer_stats->tempo_buffer_last_write_ix) {
             fprintf(stdout, "buffer_watcher detected a tempo buffer update with payload:\n");
             struct tempo_message msg = args->tempo_buffer[args->shared_buffer_stats->tempo_buffer_last_write_ix];
-            fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, timestamp: %lld\n", 
-                msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.timestamp
+            fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, measure: %lld\n", 
+                msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.measure
             );
             tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
         }
@@ -101,7 +113,8 @@ static void * udp_broadcaster(void *arg) {
     struct shared_buffer_stats *buffer_stats = global_t_arg->shared_buffer_stats;
     
     int last_tempo_change = 0;
-    int sockfd, optval, n;
+    int last_event_rollover = 0;
+    int sockfd, optval, n, last_event_read, last_event_write, num_events;
 
     struct sockaddr_in serveraddr;
     struct sockaddr_in broadcastaddr;
@@ -111,6 +124,9 @@ static void * udp_broadcaster(void *arg) {
 
     struct time_message *time_send_buffer = malloc(1);
     struct time_message time_broadcast_message;
+
+    struct event_message *event_send_buffer = malloc(1);
+    struct event_message event_broadcast_message;
 
     time_broadcast_message.message_type = TIME;
     time_broadcast_message.device_id = 0;
@@ -153,29 +169,73 @@ static void * udp_broadcaster(void *arg) {
 
         //handle broadcasts based on state changes
 
-        //First check for a new beat and broadcast
-        if(last_beat < global_t_arg->beat){
+        //First check for a new beat and broadcast (highest priority)
+        if(last_beat != global_t_arg->beat){
+
             time_broadcast_message.measure = global_t_arg->measure;
             time_broadcast_message.beat = global_t_arg->beat;
-            time_broadcast_message.beat_inverval = global_t_arg->beat_interval;
+            time_broadcast_message.beat_interval = global_t_arg->beat_interval;
+
             time_send_buffer[0] = time_broadcast_message;
+
             n = sendto(
-                sockfd, time_send_buffer, sizeof(struct time_message), 0,
+                sockfd, time_send_buffer, sizeof(struct time_message), 0, 
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
             );
-            if(n == 1){
-                fprintf(stdout, 
-                        "Time broadcast complete for measure %i, beat %i\n", 
-                        time_broadcast_message.measure, time_broadcast_message.beat
-                        );
+            if(n > 0){
+                // fprintf(stdout, 
+                //         "Time broadcast complete for measure %i, beat %i, chars sent: %i\n", 
+                //         time_broadcast_message.measure, time_broadcast_message.beat, n
+                //         );
             } else {
-                fprintf(stdout, "Unable to send time message %i %i\n",
-                        time_broadcast_message.measure, time_broadcast_message.beat
+                fprintf(stdout, "Unable to send time message %i %i, failure with code %i\n",
+                        time_broadcast_message.measure, time_broadcast_message.beat, n
                 );
             }
+            last_beat = global_t_arg->beat;
         }
-        //Next check for tempo change (should be lower priority)       
-        if(last_tempo_change != global_t_arg->current_tempo) {
+        //Next check for events in queue
+        else if(global_t_arg->shared_buffer_stats->event_buffer_last_write_ix 
+                != global_t_arg->shared_buffer_stats->event_buffer_last_read_ix) {
+
+            last_event_read = global_t_arg->shared_buffer_stats->event_buffer_last_read_ix;
+            last_event_write = global_t_arg->shared_buffer_stats->event_buffer_last_write_ix;
+
+            if(global_t_arg->shared_buffer_stats->event_buffer_rollovers > last_event_rollover){
+                num_events = (EVENT_BUFFER_SIZE - last_event_read) + last_event_write;
+            } else {
+                num_events = last_event_write - last_event_read;
+            }
+            int event_ix = last_event_read + 1;
+            int event_buffer_loc;
+            for(int i = 0; i < num_events; i++){
+                if(event_ix + i < EVENT_BUFFER_SIZE) {
+                    event_buffer_loc = event_ix;
+                } else {
+                    event_buffer_loc = (event_ix + i) - EVENT_BUFFER_SIZE;
+                }
+                event_broadcast_message = global_t_arg->event_buffer[event_buffer_loc];
+                event_send_buffer[0] = event_broadcast_message;
+                n = sendto(
+                sockfd, event_send_buffer, sizeof(struct event_message), 0, 
+                (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
+                );
+                if(n > 0){
+                    fprintf(stdout, 
+                            "Event broadcast of size %i forwarded from device %i\n", 
+                            n, event_broadcast_message.device_id
+                            );
+                } else {
+                    fprintf(stdout, "Unable to send event message from device %i, failure with code %i\n",
+                           event_broadcast_message.device_id, n
+                    );
+                }
+            }
+            global_t_arg->shared_buffer_stats->event_buffer_last_read_ix = last_event_write;
+            last_event_rollover = global_t_arg->shared_buffer_stats->event_buffer_rollovers;
+        }  
+        //Then check for tempo change (should be lower priority)       
+        else if(last_tempo_change != global_t_arg->current_tempo) {
 
             tempo_broadcast_message.message_type = TEMPO;
             tempo_broadcast_message.device_id = 0;
@@ -220,10 +280,13 @@ static void * udp_listener(void *arg) {
     char *buf;
     char *hostaddrp;
     int optval;
-    int n;
+    int n, i;
 
     int msg_type;
     int client_address;
+
+    struct tempo_message t_msg;
+    struct event_message e_msg;
     
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -280,17 +343,31 @@ static void * udp_listener(void *arg) {
 
         if(msg_type == TEMPO) {
             fprintf(stdout, "Received tempo message!\n");
-            struct tempo_message msg;
+            t_msg.message_type  = msg_type;
+            t_msg.device_id     = ntohl(*(receive_buffer + 1));
+            t_msg.bpm           = ntohl(*(receive_buffer + 2));
+            t_msg.confidence    = ntohl(*(receive_buffer + 3));
+            t_msg.measure       = ntohl(*(receive_buffer + 4));
+            t_msg.beat          = ntohl(*(receive_buffer + 5));
 
-            msg.message_type = msg_type;
-            msg.device_id = ntohl(*(receive_buffer + 1));
-            msg.bpm = ntohl(*(receive_buffer + 2));
-            msg.confidence = ntohl(*(receive_buffer + 3));
-            msg.timestamp = ntohl(*(receive_buffer + 4));
-
-            write_to_tempo_buffer(global_t_arg->tempo_buffer, msg, buffer_stats);
+            write_to_tempo_buffer(global_t_arg->tempo_buffer, t_msg, buffer_stats);
         } else if(msg_type == EVENT) {
             fprintf(stdout, "Received event message!\n");
+            e_msg.message_type      = msg_type;
+            e_msg.device_id         = ntohl(*(receive_buffer + 1));
+            e_msg.event_type        = ntohl(*(receive_buffer + 2));
+            e_msg.measure           = ntohl(*(receive_buffer + 3));
+            e_msg.beat              = ntohl(*(receive_buffer + 4));
+            e_msg.num_used_params   = ntohl(*(receive_buffer + 5));
+            for(i = 0; i < e_msg.num_used_params; i++) {
+                if(i < e_msg.num_used_params) {
+                    e_msg.params[i] = ntohl(*(receive_buffer + (6 + i)));
+                } else {
+                    e_msg.params[i] = 0;
+                }
+            }
+
+            write_to_event_buffer(global_t_arg->event_buffer, e_msg, buffer_stats);
         } else if(msg_type == TIME) {
             fprintf(stdout, "Received time message!\n");
         }
@@ -301,6 +378,40 @@ static void * udp_listener(void *arg) {
             //do error stuff
         }
     }
+}
+
+int write_to_event_buffer(void *event_buffer, struct event_message message, void *buffer_stats) {
+
+    struct shared_buffer_stats *stats = buffer_stats;
+    struct event_message *event_buff = event_buffer;
+
+    if(stats->event_buffer_locked == 1) {
+        fprintf(stdout, "event buffer locked!");
+        return -1;
+    }
+
+    stats->event_buffer_locked = 1;
+
+    //check if we need to rollover to 0
+    if(stats->event_buffer_last_write_ix >= EVENT_BUFFER_SIZE) {
+        stats->event_buffer_last_write_ix = 0;
+        stats->event_buffer_rollovers++;
+    }
+
+    fprintf(stdout, "Writing event to buffer\n");
+    fprintf(stdout, "Message type: %i, Device ID: %i, Event Type: %i, measure: %i, beat: %i, num_params: %i\n", 
+        message.message_type,
+        message.device_id,
+        message.event_type,
+        message.measure,
+        message.beat,
+        message.num_used_params
+    );
+
+    stats->event_buffer_last_write_ix++;
+    event_buff[stats->event_buffer_last_write_ix] = message;
+    fprintf(stdout, "Wrote message to event buffer position %i\n", stats->event_buffer_last_write_ix);
+    stats->event_buffer_locked = 0;
 }
 
 //Write data in message to tempo buffer
@@ -325,12 +436,13 @@ int write_to_tempo_buffer(void *tempo_buffer, struct tempo_message message, void
     }
 
     fprintf(stdout, "Writing tempo to buffer\n");
-    fprintf(stdout, "Message type: %i, Device ID: %i, BPM: %i, Confidence: %i, timestamp: %llu\n", 
+    fprintf(stdout, "Message type: %i, Device ID: %i, BPM: %i, Confidence: %i, measure: %i, beat: %i\n", 
         message.message_type,
         message.device_id,
         message.bpm,
         message.confidence,
-        message.timestamp
+        message.measure,
+        message.beat
     );
     
     stats->tempo_buffer_last_write_ix++;
