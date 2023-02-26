@@ -1,10 +1,5 @@
 
 #include <stdint.h>
-
-#include "tempo_calculator.h"
-#include "beat-master.h"
-#include "aggregator.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +13,9 @@
 #include <time.h>
 #include <sched.h>
 
+#include "tempo_calculator.h"
+#include "beat-master.h"
+#include "aggregator.h"
 
 
 void main() {
@@ -178,7 +176,7 @@ static void * udp_broadcaster(void *arg) {
             time_broadcast_message.beat_interval = global_t_arg->beat_interval;
 
             time_send_buffer[0] = time_broadcast_message;
-
+            //Send over broadcast channel:
             n = sendto(
                 sockfd, time_send_buffer, sizeof(struct time_message), 0, 
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
@@ -193,6 +191,16 @@ static void * udp_broadcaster(void *arg) {
                         time_broadcast_message.measure, time_broadcast_message.beat, n
                 );
             }
+            //Send to clients in client list:
+            for(int i = 0; i < global_t_arg->num_clients; i++){
+                broadcastaddr.sin_addr.s_addr = global_t_arg->clients[i];
+                n = sendto(
+                    sockfd, time_send_buffer, sizeof(struct time_message), 0,
+                    (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
+                );
+            }
+            //Set broadcast address back to network broadcast IP:
+            broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
             last_beat = global_t_arg->beat;
         }
         //Next check for events in queue
@@ -341,6 +349,38 @@ static void * udp_listener(void *arg) {
         }
 
         //handle message receipts by type:
+
+        if(msg_type == REGISTER_CLIENT) {
+            int address_in_client_list = 0;
+            struct sockaddr_in temp_addr;
+            fprintf(stdout, "Received registration message! Current clients:\n");
+
+            for(i = 0; i < global_t_arg->num_clients; i++){
+
+                temp_addr.sin_addr.s_addr = global_t_arg->clients[i];
+
+                fprintf(stdout, inet_ntoa(temp_addr.sin_addr));
+                fprintf(stdout, "\n");
+
+                if(clientaddr.sin_addr.s_addr == global_t_arg->clients[i]){
+                    address_in_client_list = 1;
+                    temp_addr.sin_addr.s_addr = clientaddr.sin_addr.s_addr;
+                    fprintf(stdout, "Client already registered: ");
+                    fprintf(stdout, inet_ntoa(temp_addr.sin_addr));
+                    fprintf(stdout, "\n");
+                }
+            }
+            if(address_in_client_list == 0 && global_t_arg->num_clients < MAX_CLIENTS){
+                global_t_arg->clients[global_t_arg->num_clients] = clientaddr.sin_addr.s_addr;
+                global_t_arg->num_clients++;
+                fprintf(stdout, "Added client: ");
+                fprintf(stdout, inet_ntoa(clientaddr.sin_addr));
+                fprintf(stdout, "\n");
+            } else {
+                fprintf(stdout, "Did not add client!\n");
+            }
+            address_in_client_list = 0;
+        }
 
         if(msg_type == TEMPO) {
             fprintf(stdout, "Received tempo message!\n");

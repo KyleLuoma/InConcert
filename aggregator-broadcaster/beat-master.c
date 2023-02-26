@@ -17,7 +17,7 @@ void * keep_rhythm(void *args) {
     clock_t beat_time, current_time;
 
     uint32_t loc_beat, loc_measure;
-    uint64_t cur_sec, cur_ns, next_sec, next_ns, interval_ns;
+    uint64_t cur_sec, cur_ns, next_sec, next_ns, interval_ns, interval_ns_backup;
 
     global_t_arg->measure = 0;
     global_t_arg->beat = 0;
@@ -43,16 +43,24 @@ void * keep_rhythm(void *args) {
     }  
     
     fprintf(stdout, "Next beat will occur at %i ns\n", next_ns);
+    
+    uint64_t last_sec_debug = 0;
 
     while(1) {
         //Update ms per beat
         while(cur_sec < next_sec || cur_ns < next_ns) {
             clock_gettime(CLOCK_REALTIME, &ts);
+#ifdef VERBOSE
+            if(last_sec_debug != ts.tv_sec) {
+                fprintf(stdout, "%u, %llu, %u, %llu, %llu\n", cur_sec, next_sec, cur_ns, next_ns, interval_ns);
+                last_sec_debug = ts.tv_sec;
+            }
+#endif
             cur_sec = ts.tv_sec;
             cur_ns = ts.tv_nsec;
         }
 
-        if(cur_ns + interval_ns > 1000000000U){
+        if(next_ns + interval_ns > 1000000000U){
             next_sec = cur_sec + 1;
             next_ns = (next_ns + interval_ns) - 1000000000U;
         } else {
@@ -73,10 +81,14 @@ void * keep_rhythm(void *args) {
         fprintf(stdout, "B: %i\n", global_t_arg->beat);
 #endif
         
+        interval_ns_backup = interval_ns;
         if(global_t_arg->current_tempo > 30) {
             interval_ns = 60000000000U / global_t_arg->current_tempo;
         } else {
             interval_ns = 60000000000U / default_bpm;
+        }
+        if(interval_ns > 60000000000U) { //Checking for error and recover to saved value
+            interval_ns = interval_ns_backup;
         }
     }
 }

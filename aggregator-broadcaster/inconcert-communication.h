@@ -16,13 +16,16 @@
 #define SEND_PORT 54523
 #define BROADCAST_PORT 54555
 #define BROADCAST_IP "10.42.0.255"
+// #define BROADCAST_IP "255.255.255.255"
 
 //Message types:
-#define TEMPO 0
-#define EVENT 1
-#define TIME  2
+#define TEMPO           0
+#define EVENT           1
+#define TIME            2
+#define REGISTER_CLIENT 3
 
 //Message structs:
+
 struct tempo_message {
     uint32_t message_type;
     uint32_t device_id;
@@ -50,4 +53,9 @@ struct time_message {
     uint32_t measure;
     uint32_t beat; //1 ... beat_signature_R values
     uint32_t beat_interval; //ms between beats
+};
+
+struct register_client_message {
+    uint32_t message_type;
+    uint32_t device_id;
 };

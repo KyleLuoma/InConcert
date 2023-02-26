@@ -10,6 +10,8 @@
 
 #define BROADCAST_PORT 54555
 
+#define MAX_CLIENTS 20
+
 
 struct global_t_args {
     struct tempo_message        *tempo_buffer;
@@ -21,6 +23,8 @@ struct global_t_args {
     uint32_t measure;
     uint32_t beat;
     uint32_t beat_interval;
+    uint32_t clients[MAX_CLIENTS];
+    int num_clients;
 };
 
 struct shared_buffer_stats {
