@@ -14,6 +14,8 @@
 
 
 #define SEND_PORT 54523
+#define BROADCAST_PORT 54555
+#define BROADCAST_IP "10.42.0.255"
 
 //Message types:
 #define TEMPO 0

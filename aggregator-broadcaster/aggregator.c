@@ -135,7 +135,8 @@ static void * udp_broadcaster(void *arg) {
 
     broadcastaddr.sin_family = AF_INET;
     broadcastaddr.sin_port = BROADCAST_PORT;
-    broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
+    // broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
+    broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
     // inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
     
     fprintf(stdout, "Broadcast address set to: ");
