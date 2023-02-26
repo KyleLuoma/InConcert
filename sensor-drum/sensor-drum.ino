@@ -15,10 +15,12 @@
 #define DEVICE_ID 1001
 
 #define SAMPLE_INTERVAL 2  //MS between sensor samples (x4 samples)
+#define SAMPLE_INTERVAL_US 2000 //uS between sensor samples
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
 #define INPUT_THRESHOLD 50 //Amount of signal to increase above idle to register as a hit
 #define IGNORE_PERIOD 30 //Number of samples to ignore after a hit detection
-#define UDP_READ_TIMEOUT 1000 //Number of ms until timing out on UDP read
+#define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
+#define MAX_US 4294967295U //Highest possible uS value
 
 // #define SERIAL_PRINT
 
@@ -31,7 +33,6 @@ int led_state = LOW;
 int has_wifi = 1;
 int wifi_status;
 int i;
-int16_t cur_measure, cur_beat;
 
 const int AGG_PACKET_SIZE = 255;
 
@@ -40,6 +41,8 @@ char incoming_udp_buffer[AGG_PACKET_SIZE]; //big enough to handle time or event 
 uint32_t registration_message_buffer[2];
 
 struct time_message current_time;
+unsigned long last_time_message_ms, next_beat_ms;
+int16_t cur_measure, cur_beat, cur_beat_interval, last_beat;
 
 IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
 WiFiUDP udp_out;
@@ -171,13 +174,13 @@ int getTimeMessage(struct time_message * new_time) {
   unsigned long timeout = millis() + UDP_READ_TIMEOUT;
   int got_message = 0;
   int packet_size = 0;
-  Serial.print("Waiting for time message\n");
+  // Serial.print("Waiting for time message\n");
   udp_in.flush();
   while(millis() < timeout){
   // while(got_message == 0) {
     packet_size = udp_in.parsePacket();
     if(packet_size > 0){
-      Serial.print("Received a UDP packet, checking type.\n");
+      // Serial.print("Received a UDP packet, checking type.\n");
       udp_in.read((unsigned char*)incoming_udp_buffer, AGG_PACKET_SIZE);
       uint32_t message_type = htonl(get_uint32_from_charbuffer(incoming_udp_buffer));
 
@@ -191,19 +194,49 @@ int getTimeMessage(struct time_message * new_time) {
         new_time->measure          = htonl(get_uint32_from_charbuffer(buffer_pointer+16));
         new_time->beat             = htonl(get_uint32_from_charbuffer(buffer_pointer+20));
         new_time->beat_interval    = htonl(get_uint32_from_charbuffer(buffer_pointer+24));
-        Serial.print("Received time message m: "); Serial.print(new_time->measure);
-        Serial.print(" b: ");Serial.print(new_time->beat); Serial.print("\n");
+        last_time_message_ms = millis();
+        // Serial.print("Received time message m: "); Serial.print(new_time->measure);
+        // Serial.print(" b: ");Serial.print(new_time->beat); 
+        // Serial.print(" interval: "); Serial.print(new_time->beat_interval);
+        // Serial.print(" at MS: "); Serial.print(last_time_message_ms); Serial.print("\n");
+        got_message = 1;
       }
     } else {
       // Serial.print("Waiting for UDP message\n");
       udp_in.flush();
     }
-    delay(1);
   }
+  if(got_message == 1) {
+    // Serial.print("Updating timing from:\n");
+    // Serial.print(  "  - cur_measure:  "); Serial.print(cur_measure);
+    // Serial.print("\n  - cur_beat:     "); Serial.print(cur_beat);
+    // Serial.print("\n  - cur_interval: "); Serial.print(cur_beat_interval);
+    // Serial.print("\n  - next_beat_ms: "); Serial.print(next_beat_ms);
+    cur_measure = new_time->measure; 
+    cur_beat = new_time->beat;
+    cur_beat_interval = new_time->beat_interval;
+    next_beat_ms = last_time_message_ms + cur_beat_interval;
+    // Serial.print("\nWith new values::\n");
+    // Serial.print(  "  - cur_measure:  "); Serial.print(cur_measure);
+    // Serial.print("\n  - cur_beat:     "); Serial.print(cur_beat);
+    // Serial.print("\n  - cur_interval: "); Serial.print(cur_beat_interval);
+    // Serial.print("\n  - next_beat_ms: "); Serial.print(next_beat_ms);
+    // Serial.print("\n");
+  }
+
   if(millis() > timeout){
     Serial.print("Timed out while waiting for udp packets on broadcast.\n");
     registerWithHost(AGGServer);
   }
+}
+
+//Calculate next uS sample time, use to protect from micros() rolloevers
+unsigned long inline getNextSampleUS(unsigned long last_sample_time) {
+  unsigned long next_sample_time = last_sample_time + SAMPLE_INTERVAL_US;
+  if(MAX_US - SAMPLE_INTERVAL_US < next_sample_time) { //expect rollover
+    next_sample_time = next_sample_time - (MAX_US - SAMPLE_INTERVAL_US);
+  } 
+  return next_sample_time;
 }
 
 //Operates on a periodic schedule:
@@ -215,45 +248,65 @@ int getTimeMessage(struct time_message * new_time) {
 // 4    Sample HiHat
 // 5    Send events in queue
 // 6    Sample Tom
-// 7    Recalculate tempo
+// 7    Recalculate tempo and progress time
 // 8    Write to terminal
 
 unsigned int loopcounter = 0;
 void loop() {
   loop_start_time = micros();
-
+  next_sample = loop_start_time;
+  
   //0 Sample Snare
   snare = ads.readADC_SingleEnded(SNARE);
-  next_sample = loop_start_time + 2000;
 
+  next_sample = getNextSampleUS(next_sample);
+  
   //1 Send tempo packet
   if(has_wifi == 1 && loopcounter % 125 == 0){
     sendAGGpacket(AGGServer);
   }
 
-  //2 Sample bass  
+  //2 Sample bass
   while(micros() < next_sample){};
   bass = ads.readADC_SingleEnded(BASS);
-  next_sample = loop_start_time + 4000;
+
+  next_sample = getNextSampleUS(next_sample);
 
   //3 Get time synch
-  if(has_wifi == 1 && (loopcounter + 50) % 500 == 0){
+  if(has_wifi == 1){
     getTimeMessage(&current_time);    
   }
 
   //4 Sample hihat  
   while(micros() < next_sample){};
   cymbal = ads.readADC_SingleEnded(CYMBAL);
-  next_sample = loop_start_time + 6000;
+
+  next_sample = getNextSampleUS(next_sample);
 
   //5 Send events in queue
 
   //6 Sample Tom
   while(micros() < next_sample){};
   tom = ads.readADC_SingleEnded(TOM);
-  next_sample = loop_start_time + 8000;
 
-  // 7 Recalculate tempo
+  next_sample = getNextSampleUS(next_sample);
+
+  // 7 Recalculate tempo and progress time
+  if(millis() > next_beat_ms) {
+    next_beat_ms = millis() + cur_beat_interval;
+    if(cur_beat >= current_time.beat_signature_R){
+      Serial.print("M: "); Serial.print(cur_measure);Serial.print("\n");
+      cur_beat = 1;
+      cur_measure++;
+    } else {
+      cur_beat++;
+      Serial.print(" B: ");Serial.print(cur_beat);Serial.print("\n");
+    }    
+  } else if (last_beat != cur_beat){
+    Serial.print("From host: M: "); Serial.print(cur_measure);;
+    Serial.print(" B: ");Serial.print(cur_beat); Serial.print("\n");
+    last_beat = cur_beat;
+  }
 
 
   // 8 Flash LED and Write to terminal
