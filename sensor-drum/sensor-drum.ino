@@ -33,8 +33,10 @@ int wifi_status;
 int i;
 int16_t cur_measure, cur_beat;
 
+const int AGG_PACKET_SIZE = 255;
+
 uint32_t tempo_msg_buffer[5];
-uint32_t incoming_udp_buffer[24]; //big enough to handle time or event messages
+char incoming_udp_buffer[AGG_PACKET_SIZE]; //big enough to handle time or event messages
 uint32_t registration_message_buffer[2];
 
 struct time_message current_time;
@@ -43,7 +45,7 @@ IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
 WiFiUDP udp_out;
 IPAddress broadcast_ip(10, 42, 0, 255); 
 WiFiUDP udp_in;
-const int AGG_PACKET_SIZE = 255;
+
 
 void setup() {
   Serial.begin(9600);
@@ -156,34 +158,49 @@ unsigned long sendAGGpacket(IPAddress& address) {
   udp_out.endPacket();
 }
 
+uint32_t get_uint32_from_charbuffer(char * charbuffer) {
+  uint32_t return_val = ((unsigned int)charbuffer[0] << 24) +
+                        ((unsigned int)charbuffer[1] << 16) +
+                        ((unsigned int)charbuffer[2] << 8)  +
+                        ((unsigned int)charbuffer[3]);
+  return return_val;           
+}
+
 int getTimeMessage(struct time_message * new_time) {
+  memset(incoming_udp_buffer, 0, AGG_PACKET_SIZE);
   unsigned long timeout = millis() + UDP_READ_TIMEOUT;
   int got_message = 0;
+  int packet_size = 0;
   Serial.print("Waiting for time message\n");
   udp_in.flush();
-  while(got_message == 0 && millis() < timeout){
+  while(millis() < timeout){
   // while(got_message == 0) {
-    if(udp_in.parsePacket() > 0){
+    packet_size = udp_in.parsePacket();
+    if(packet_size > 0){
       Serial.print("Received a UDP packet, checking type.\n");
-      udp_in.read((unsigned char*)incoming_udp_buffer, sizeof(incoming_udp_buffer));
-      if(((uint32_t*)incoming_udp_buffer)[0] == htonl(TIME)){
-        new_time->message_type     = incoming_udp_buffer[0];
-        new_time->device_id        = incoming_udp_buffer[1];
-        new_time->beat_signature_L = incoming_udp_buffer[2];
-        new_time->beat_signature_R = incoming_udp_buffer[3];
-        new_time->measure          = incoming_udp_buffer[4];
-        new_time->beat             = incoming_udp_buffer[5];
-        new_time->beat_interval    = incoming_udp_buffer[6];
-        got_message = 1;
-        Serial.print("Received time message "); Serial.print(new_time->measure);
-        Serial.print(new_time->beat); Serial.print("\n");
+      udp_in.read((unsigned char*)incoming_udp_buffer, AGG_PACKET_SIZE);
+      uint32_t message_type = htonl(get_uint32_from_charbuffer(incoming_udp_buffer));
+
+      char* buffer_pointer = &incoming_udp_buffer[0];
+
+      if(message_type == TIME){
+        new_time->message_type     = message_type;
+        new_time->device_id        = htonl(get_uint32_from_charbuffer(buffer_pointer+4));
+        new_time->beat_signature_L = htonl(get_uint32_from_charbuffer(buffer_pointer+8));
+        new_time->beat_signature_R = htonl(get_uint32_from_charbuffer(buffer_pointer+12));
+        new_time->measure          = htonl(get_uint32_from_charbuffer(buffer_pointer+16));
+        new_time->beat             = htonl(get_uint32_from_charbuffer(buffer_pointer+20));
+        new_time->beat_interval    = htonl(get_uint32_from_charbuffer(buffer_pointer+24));
+        Serial.print("Received time message m: "); Serial.print(new_time->measure);
+        Serial.print(" b: ");Serial.print(new_time->beat); Serial.print("\n");
       }
     } else {
-      Serial.print("Received UDP message that wasn't a TIME message\n");
+      // Serial.print("Waiting for UDP message\n");
       udp_in.flush();
     }
+    delay(1);
   }
-  if(millis() > UDP_READ_TIMEOUT){
+  if(millis() > timeout){
     Serial.print("Timed out while waiting for udp packets on broadcast.\n");
     registerWithHost(AGGServer);
   }
@@ -220,7 +237,7 @@ void loop() {
   next_sample = loop_start_time + 4000;
 
   //3 Get time synch
-  if(has_wifi == 1 && (loopcounter + 50) % 125 == 0){
+  if(has_wifi == 1 && (loopcounter + 50) % 500 == 0){
     getTimeMessage(&current_time);    
   }
 
