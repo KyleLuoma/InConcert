@@ -13,13 +13,14 @@
 #define TOM 3
 
 #define DEVICE_ID 1001
+// #define REGISTER_WITH_HOST //Use if unable to receive broadcasts messages
 
 #define SAMPLE_INTERVAL 2  //MS between sensor samples (x4 samples)
 #define SAMPLE_INTERVAL_US 2000 //uS between sensor samples
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
 #define INPUT_THRESHOLD 50 //Amount of signal to increase above idle to register as a hit
 #define IGNORE_PERIOD 30 //Number of samples to ignore after a hit detection
-#define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
+#define UDP_READ_TIMEOUT 20 //Number of ms until timing out on UDP read
 #define MAX_US 4294967295U //Highest possible uS value
 
 // #define SERIAL_PRINT
@@ -32,6 +33,8 @@ const int ledPin = LED_BUILTIN;
 int led_state = LOW;
 int has_wifi = 1;
 int wifi_status;
+int udp_in_last_generation = 0;
+int udp_in_gcur_eneration = 0; //number of times udp_in is reset
 int i;
 
 const int AGG_PACKET_SIZE = 255;
@@ -42,7 +45,9 @@ uint32_t registration_message_buffer[2];
 
 struct time_message current_time;
 unsigned long last_time_message_ms, next_beat_ms;
-int16_t cur_measure, cur_beat, cur_beat_interval, last_beat;
+int16_t cur_measure, cur_beat, cur_beat_interval, last_beat, last_measure;
+
+
 
 IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
 WiFiUDP udp_out;
@@ -85,6 +90,9 @@ void setup() {
     if(udp_in.begin(BROADCAST_PORT)==0){
       Serial.print("Unable to bind receive port.\n");
     };
+#ifdef REGISTER_WITH_HOST
+    registerWithHost(AGGServer);
+#endif
   }
 
   pinMode(ledPin, OUTPUT);
@@ -128,6 +136,8 @@ void setup() {
   cymbal_th = max_c + 10;
   bass_th = max_b + INPUT_THRESHOLD;
   tom_th = max_tom + INPUT_THRESHOLD;
+
+  cur_beat_interval = 500;
 }
 
 unsigned long loop_start_time;
@@ -152,13 +162,14 @@ unsigned long sendAGGpacket(IPAddress& address) {
 
   tempo_msg_buffer[0] = htonl(0);            //message type
   tempo_msg_buffer[1] = htonl(DEVICE_ID);    //device id
-  tempo_msg_buffer[2] = htonl(120);          //tempo
+  tempo_msg_buffer[2] = htonl(60);          //tempo
   tempo_msg_buffer[3] = htonl(94);           //confidence
   tempo_msg_buffer[5] = htonl(10001);        //timestamp
 
   udp_out.beginPacket(address, SEND_PORT); //AGG requests are to port 54534
   udp_out.write((uint8_t*)tempo_msg_buffer, sizeof(struct tempo_message));
   udp_out.endPacket();
+  udp_out.flush();  
 }
 
 uint32_t get_uint32_from_charbuffer(char * charbuffer) {
@@ -170,14 +181,13 @@ uint32_t get_uint32_from_charbuffer(char * charbuffer) {
 }
 
 int getTimeMessage(struct time_message * new_time) {
+
   memset(incoming_udp_buffer, 0, AGG_PACKET_SIZE);
   unsigned long timeout = millis() + UDP_READ_TIMEOUT;
   int got_message = 0;
   int packet_size = 0;
-  // Serial.print("Waiting for time message\n");
-  udp_in.flush();
-  while(millis() < timeout){
-  // while(got_message == 0) {
+  // Serial.print("Inside time_message function\n");
+  while(millis() < timeout && got_message == 0){
     packet_size = udp_in.parsePacket();
     if(packet_size > 0){
       // Serial.print("Received a UDP packet, checking type.\n");
@@ -200,10 +210,12 @@ int getTimeMessage(struct time_message * new_time) {
         // Serial.print(" interval: "); Serial.print(new_time->beat_interval);
         // Serial.print(" at MS: "); Serial.print(last_time_message_ms); Serial.print("\n");
         got_message = 1;
+      } else {
+        Serial.print("Received message of type: "); Serial.print(message_type); Serial.print("\n");
       }
+
     } else {
-      // Serial.print("Waiting for UDP message\n");
-      udp_in.flush();
+      udp_in.read();
     }
   }
   if(got_message == 1) {
@@ -226,7 +238,6 @@ int getTimeMessage(struct time_message * new_time) {
 
   if(millis() > timeout){
     Serial.print("Timed out while waiting for udp packets on broadcast.\n");
-    registerWithHost(AGGServer);
   }
 }
 
@@ -246,7 +257,7 @@ unsigned long inline getNextSampleUS(unsigned long last_sample_time) {
 // 2    Sample Bass
 // 3    Get network time synch
 // 4    Sample HiHat
-// 5    Send events in queue
+// 5    Send events in queue, periodically reset udp sockets
 // 6    Sample Tom
 // 7    Recalculate tempo and progress time
 // 8    Write to terminal
@@ -273,9 +284,8 @@ void loop() {
   next_sample = getNextSampleUS(next_sample);
 
   //3 Get time synch
-  if(has_wifi == 1){
-    getTimeMessage(&current_time);    
-  }
+  getTimeMessage(&current_time);    
+  
 
   //4 Sample hihat  
   while(micros() < next_sample){};
@@ -285,6 +295,15 @@ void loop() {
 
   //5 Send events in queue
 
+  //periodically reset udp sockets
+  if(loopcounter % 1000 == 0){
+    Serial.println("Resetting UDP sockets");
+    udp_out.stop();
+    udp_in.stop();
+    udp_out.begin(SEND_PORT);
+    udp_in.begin(BROADCAST_PORT);
+  }
+
   //6 Sample Tom
   while(micros() < next_sample){};
   tom = ads.readADC_SingleEnded(TOM);
@@ -292,7 +311,13 @@ void loop() {
   next_sample = getNextSampleUS(next_sample);
 
   // 7 Recalculate tempo and progress time
-  if(millis() > next_beat_ms) {
+
+  if (last_beat != cur_beat || last_measure != cur_measure){ //First check if we got an update from UDP
+    Serial.print("From host: M: "); Serial.print(cur_measure);;
+    Serial.print(" B: ");Serial.print(cur_beat); Serial.print("\n");
+    last_beat = cur_beat;
+    last_measure = cur_measure;
+  } else if(millis() > next_beat_ms) { //Otherwise update with last known data
     next_beat_ms = millis() + cur_beat_interval;
     if(cur_beat >= current_time.beat_signature_R){
       Serial.print("M: "); Serial.print(cur_measure);Serial.print("\n");
@@ -301,12 +326,10 @@ void loop() {
     } else {
       cur_beat++;
       Serial.print(" B: ");Serial.print(cur_beat);Serial.print("\n");
-    }    
-  } else if (last_beat != cur_beat){
-    Serial.print("From host: M: "); Serial.print(cur_measure);;
-    Serial.print(" B: ");Serial.print(cur_beat); Serial.print("\n");
+    }   
     last_beat = cur_beat;
-  }
+    last_measure = cur_measure;
+  } 
 
 
   // 8 Flash LED and Write to terminal
