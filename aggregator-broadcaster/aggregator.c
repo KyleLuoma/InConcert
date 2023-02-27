@@ -50,6 +50,11 @@ void main() {
     global_t_arg.beat_signature_R = 4;
     global_t_arg.num_clients = 0;
     global_t_arg.num_known_devices = 0;
+    for(int i = 0; i < MAX_CLIENTS; i++){
+        struct tempo_message tmp_msg;
+        tmp_msg.message_type = UNDEF_MSG;
+        global_t_arg.client_tempo_messages[i] = tmp_msg;
+    }
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
@@ -90,6 +95,7 @@ void * buffer_watcher(void *arg) {
     struct global_t_args *args = arg;
     int tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
     int tb_last_rollover = args->shared_buffer_stats->tempo_buffer_rollovers;
+    int i;
 
     while(1) {
         if(tb_last_write < args->shared_buffer_stats->tempo_buffer_last_write_ix) {
@@ -98,6 +104,19 @@ void * buffer_watcher(void *arg) {
             fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, measure: %lld\n", 
                 msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.measure
             );
+            //Update client_tempo_messages
+            for(i = 0; i < args->num_known_devices; i++){
+                if(args->known_devices[i] == msg.device_id) {
+                    struct tempo_message store_msg;
+                    store_msg.message_type = TEMPO;
+                    store_msg.device_id = msg.device_id;
+                    store_msg.bpm = msg.bpm;
+                    store_msg.confidence = msg.confidence;
+                    store_msg.measure = msg.measure;
+                    store_msg.beat = msg.beat;
+                    args->client_tempo_messages[i] = store_msg;
+                }
+            }
             tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
         }
         if(tb_last_rollover < args->shared_buffer_stats->tempo_buffer_rollovers) {

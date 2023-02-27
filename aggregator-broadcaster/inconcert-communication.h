@@ -23,6 +23,7 @@
 #define EVENT           1
 #define TIME            2
 #define REGISTER_CLIENT 3
+#define UNDEF_MSG       5150
 
 //Message structs:
 
