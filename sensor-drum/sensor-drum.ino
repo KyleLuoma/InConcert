@@ -20,15 +20,24 @@
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
 #define INPUT_THRESHOLD 50 //Amount of signal to increase above idle to register as a hit
 #define IGNORE_PERIOD 30 //Number of samples to ignore after a hit detection
-#define UDP_READ_TIMEOUT 20 //Number of ms until timing out on UDP read
+#define INTERVAL_LIMIT 32 //Number of interval values to store for analysis
+#define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
 #define MAX_US 4294967295U //Highest possible uS value
 
 // #define SERIAL_PRINT
+// #define DEBUG_PRINT
+
 
 Adafruit_ADS1115 ads;
 
 int16_t snare, cymbal, bass, tom; //Use for storing sample inputs
 int16_t snare_th, cymbal_th, bass_th, tom_th;//Input thresholds
+byte snare_ignore, cymbal_ignore, bass_ignore, tom_ignore; //Ignore flags
+byte snare_hit, cymbal_hit, bass_hit, tom_hit; //Hit state 
+unsigned long sample_time;
+unsigned long snare_hit_ms, cymbal_hit_ms, bass_hit_ms, tom_hit_ms;
+unsigned long snare_intvl, cymbal_intvl, bass_intvl, tom_intvl;
+
 const int ledPin = LED_BUILTIN; 
 int led_state = LOW;
 int has_wifi = 1;
@@ -132,20 +141,37 @@ void setup() {
     }
     delay(SAMPLE_INTERVAL);    
   }
+  // --- Initialize status variables ---
   snare_th = max_s + INPUT_THRESHOLD;
   cymbal_th = max_c + 10;
   bass_th = max_b + INPUT_THRESHOLD;
   tom_th = max_tom + INPUT_THRESHOLD;
-
   cur_beat_interval = 500;
+
+  snare_ignore = 0;
+  cymbal_ignore = 0;
+  bass_ignore = 0;
+  tom_ignore = 0;
+
+  snare_hit = 0;
+  cymbal_hit = 0;
+  bass_hit = 0;
+  tom_hit = 0;
+
+  snare_hit_ms = 0;
+  cymbal_hit_ms = 0;
+  bass_hit_ms = 0;
+  tom_hit_ms = 0;
 }
 
 unsigned long loop_start_time;
 unsigned long next_sample;
 
 unsigned long registerWithHost(IPAddress& address) {
+  #ifdef DEBUG_PRINT
   Serial.print("Sending registration message to Agg Server ");
   Serial.println(AGGServer);
+  #endif
   memset(registration_message_buffer, 0, sizeof(struct register_client_message));
   registration_message_buffer[0] = htonl(REGISTER_CLIENT);
   registration_message_buffer[1] = htonl(DEVICE_ID);
@@ -155,8 +181,10 @@ unsigned long registerWithHost(IPAddress& address) {
 }
 
 unsigned long sendAGGpacket(IPAddress& address) {
+  #ifdef DEBUG_PRINT
   Serial.print("Sending Packet to Agg Server ");
   Serial.println(AGGServer);
+  #endif
 
   memset(tempo_msg_buffer, 0, sizeof(struct tempo_message));
 
@@ -186,11 +214,9 @@ int getTimeMessage(struct time_message * new_time) {
   unsigned long timeout = millis() + UDP_READ_TIMEOUT;
   int got_message = 0;
   int packet_size = 0;
-  // Serial.print("Inside time_message function\n");
   while(millis() < timeout && got_message == 0){
     packet_size = udp_in.parsePacket();
     if(packet_size > 0){
-      // Serial.print("Received a UDP packet, checking type.\n");
       udp_in.read((unsigned char*)incoming_udp_buffer, AGG_PACKET_SIZE);
       uint32_t message_type = htonl(get_uint32_from_charbuffer(incoming_udp_buffer));
 
@@ -205,13 +231,17 @@ int getTimeMessage(struct time_message * new_time) {
         new_time->beat             = htonl(get_uint32_from_charbuffer(buffer_pointer+20));
         new_time->beat_interval    = htonl(get_uint32_from_charbuffer(buffer_pointer+24));
         last_time_message_ms = millis();
-        // Serial.print("Received time message m: "); Serial.print(new_time->measure);
-        // Serial.print(" b: ");Serial.print(new_time->beat); 
-        // Serial.print(" interval: "); Serial.print(new_time->beat_interval);
-        // Serial.print(" at MS: "); Serial.print(last_time_message_ms); Serial.print("\n");
+      #ifdef DEBUG_PRINT 
+        Serial.print("Received time message m: "); Serial.print(new_time->measure);
+        Serial.print(" b: ");Serial.print(new_time->beat); 
+        Serial.print(" interval: "); Serial.print(new_time->beat_interval);
+        Serial.print(" at MS: "); Serial.print(last_time_message_ms); Serial.print("\n");
+      #endif
         got_message = 1;
       } else {
+        #ifdef DEBUG_PRINT 
         Serial.print("Received message of type: "); Serial.print(message_type); Serial.print("\n");
+        #endif
       }
 
     } else {
@@ -219,25 +249,32 @@ int getTimeMessage(struct time_message * new_time) {
     }
   }
   if(got_message == 1) {
+    #ifdef DEBUG_PRINT 
     // Serial.print("Updating timing from:\n");
     // Serial.print(  "  - cur_measure:  "); Serial.print(cur_measure);
     // Serial.print("\n  - cur_beat:     "); Serial.print(cur_beat);
     // Serial.print("\n  - cur_interval: "); Serial.print(cur_beat_interval);
     // Serial.print("\n  - next_beat_ms: "); Serial.print(next_beat_ms);
+    #endif
     cur_measure = new_time->measure; 
     cur_beat = new_time->beat;
     cur_beat_interval = new_time->beat_interval;
     next_beat_ms = last_time_message_ms + cur_beat_interval;
+    #ifdef DEBUG_PRINT 
     // Serial.print("\nWith new values::\n");
     // Serial.print(  "  - cur_measure:  "); Serial.print(cur_measure);
     // Serial.print("\n  - cur_beat:     "); Serial.print(cur_beat);
     // Serial.print("\n  - cur_interval: "); Serial.print(cur_beat_interval);
     // Serial.print("\n  - next_beat_ms: "); Serial.print(next_beat_ms);
     // Serial.print("\n");
+    #endif
+
   }
 
   if(millis() > timeout){
+    #ifdef DEBUG_PRINT 
     Serial.print("Timed out while waiting for udp packets on broadcast.\n");
+    #endif 
   }
 }
 
@@ -269,6 +306,17 @@ void loop() {
   
   //0 Sample Snare
   snare = ads.readADC_SingleEnded(SNARE);
+  sample_time = millis();
+  if(snare_ignore == 0 && snare > snare_th){
+    if(snare_hit_ms > 0){
+      snare_intvl = sample_time - snare_hit_ms;
+    }
+    snare_hit_ms = sample_time;
+    snare_hit = 1;
+    snare_ignore = IGNORE_PERIOD;
+  } else if (snare_ignore > 0) {
+    snare_ignore--;
+  }
 
   next_sample = getNextSampleUS(next_sample);
   
@@ -297,7 +345,9 @@ void loop() {
 
   //periodically reset udp sockets
   if(loopcounter % 1000 == 0){
+    #ifdef DEBUG_PRINT 
     Serial.println("Resetting UDP sockets");
+    #endif
     udp_out.stop();
     udp_in.stop();
     udp_out.begin(SEND_PORT);
@@ -313,19 +363,25 @@ void loop() {
   // 7 Recalculate tempo and progress time
 
   if (last_beat != cur_beat || last_measure != cur_measure){ //First check if we got an update from UDP
+    #ifdef DEBUG_PRINT
     Serial.print("From host: M: "); Serial.print(cur_measure);;
     Serial.print(" B: ");Serial.print(cur_beat); Serial.print("\n");
+    #endif
     last_beat = cur_beat;
     last_measure = cur_measure;
   } else if(millis() > next_beat_ms) { //Otherwise update with last known data
     next_beat_ms = millis() + cur_beat_interval;
     if(cur_beat >= current_time.beat_signature_R){
+      #ifdef DEBUG_PRINT
       Serial.print("M: "); Serial.print(cur_measure);Serial.print("\n");
+      #endif
       cur_beat = 1;
       cur_measure++;
     } else {
       cur_beat++;
+      #ifdef DEBUG_PRINT
       Serial.print(" B: ");Serial.print(cur_beat);Serial.print("\n");
+      #endif
     }   
     last_beat = cur_beat;
     last_measure = cur_measure;
@@ -340,11 +396,13 @@ void loop() {
   }
   digitalWrite(ledPin, led_state);
 
-#ifdef SERIAL_PRINT  
+#ifdef SERIAL_PRINT
+  //raw data:
   Serial.print(snare); Serial.print(", ");
   Serial.print(bass); Serial.print(", ");
   Serial.print(cymbal); Serial.print(", ");
   Serial.print(tom); Serial.print("\n");
+  //Hit determination
 #endif
 
   loopcounter++;
