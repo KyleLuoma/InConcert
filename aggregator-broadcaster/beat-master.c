@@ -63,7 +63,7 @@ void * keep_rhythm(void *args) {
 
         if(next_ns + interval_ns < 1000000000U) {
             next_sec = cur_sec;
-            next_ns = next_ns + interval_ns;
+            next_ns += interval_ns;
         } else {
             next_sec = cur_sec;
             while(next_ns + interval_ns > 1000000000U){
@@ -88,7 +88,7 @@ void * keep_rhythm(void *args) {
 #endif
         
         interval_ns_backup = interval_ns;
-        if(global_t_arg->current_tempo > 30) {
+        if(global_t_arg->current_tempo > 10) {
             interval_ns = 60000000000U / global_t_arg->current_tempo;
         } else {
             interval_ns = 60000000000U / default_bpm;

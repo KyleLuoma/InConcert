@@ -48,6 +48,8 @@ void main() {
     global_t_arg.beat = 0;
     global_t_arg.beat_signature_L = 4;
     global_t_arg.beat_signature_R = 4;
+    global_t_arg.num_clients = 0;
+    global_t_arg.num_known_devices = 0;
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
@@ -292,7 +294,8 @@ static void * udp_listener(void *arg) {
     int n, i;
 
     int msg_type;
-    int client_address;
+    int client_address, client_device_id;
+    int new_client = 0;
 
     struct tempo_message t_msg;
     struct event_message e_msg;
@@ -344,8 +347,23 @@ static void * udp_listener(void *arg) {
             //htonl(*(global_t_arg->rcv_buffer + i))
 
             msg_type = htonl(*(receive_buffer));
+            client_device_id = htonl(*(receive_buffer+1));
 
-            fprintf(stdout, "\nMessage type: %i\n", msg_type);
+            fprintf(stdout, "\nMessage type: %i from device ID: %i\n", msg_type, client_device_id);
+        }
+
+        //Check if device ID is new
+        new_client = 1;
+        for(i = 0; i < global_t_arg->num_known_devices; i++){
+            if(client_device_id == global_t_arg->known_devices[i]){
+                new_client = 0;
+            }
+        }
+        if(new_client == 1){
+            global_t_arg->known_devices[global_t_arg->num_known_devices] = client_device_id;
+            global_t_arg->num_known_devices++;
+            new_client = 0;
+            fprintf(stdout, "Added new device ID: %i. I now know of %i devices.\n", client_device_id, global_t_arg->num_known_devices);
         }
 
         //handle message receipts by type:

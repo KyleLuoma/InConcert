@@ -23,8 +23,10 @@ struct global_t_args {
     uint32_t measure;
     uint32_t beat;
     uint32_t beat_interval;
-    uint32_t clients[MAX_CLIENTS];
+    uint32_t clients[MAX_CLIENTS]; //IPs who registered for messages
+    uint32_t known_devices[MAX_CLIENTS]; //Device IDs of all devices who sent packets
     int num_clients;
+    int num_known_devices;
 };
 
 struct shared_buffer_stats {
