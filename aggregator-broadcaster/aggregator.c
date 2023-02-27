@@ -132,7 +132,7 @@ static void * udp_broadcaster(void *arg) {
     time_broadcast_message.beat_signature_R = 4;
 
     broadcastaddr.sin_family = AF_INET;
-    broadcastaddr.sin_port = BROADCAST_PORT;
+    broadcastaddr.sin_port = htons((unsigned short)BROADCAST_PORT);
     // broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
     broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
     // inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
@@ -192,13 +192,13 @@ static void * udp_broadcaster(void *arg) {
                 );
             }
             //Send to clients in client list:
-            for(int i = 0; i < global_t_arg->num_clients; i++){
-                broadcastaddr.sin_addr.s_addr = global_t_arg->clients[i];
-                n = sendto(
-                    sockfd, time_send_buffer, sizeof(struct time_message), 0,
-                    (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
-                );
-            }
+            // for(int i = 0; i < global_t_arg->num_clients; i++){
+            //     broadcastaddr.sin_addr.s_addr = global_t_arg->clients[i];
+            //     n = sendto(
+            //         sockfd, time_send_buffer, sizeof(struct time_message), 0,
+            //         (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
+            //     );
+            // }
             //Set broadcast address back to network broadcast IP:
             broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
             last_beat = global_t_arg->beat;

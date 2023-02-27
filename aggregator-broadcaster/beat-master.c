@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-// #define VERBOSE
+#define VERBOSE
 
 uint32_t bs_L, bs_R;
 double ms_per_beat;
@@ -29,6 +29,7 @@ void * keep_rhythm(void *args) {
     //Set to default 1 BPS until we get tempo data
     int default_bpm = 120;
     interval_ns = 60000000000U / default_bpm;
+    global_t_arg->beat_interval = interval_ns / 100000;
 
     clock_gettime(CLOCK_REALTIME, &ts);
     cur_sec = ts.tv_sec;
@@ -52,7 +53,7 @@ void * keep_rhythm(void *args) {
             clock_gettime(CLOCK_REALTIME, &ts);
 #ifdef VERBOSE
             if(last_sec_debug != ts.tv_sec) {
-                fprintf(stdout, "%u, %llu, %u, %llu, %llu\n", cur_sec, next_sec, cur_ns, next_ns, interval_ns);
+                // fprintf(stdout, "%u, %llu, %u, %llu, %llu\n", cur_sec, next_sec, cur_ns, next_ns, interval_ns);
                 last_sec_debug = ts.tv_sec;
             }
 #endif
@@ -60,13 +61,18 @@ void * keep_rhythm(void *args) {
             cur_ns = ts.tv_nsec;
         }
 
-        if(next_ns + interval_ns > 1000000000U){
-            next_sec = cur_sec + 1;
-            next_ns = (next_ns + interval_ns) - 1000000000U;
-        } else {
+        if(next_ns + interval_ns < 1000000000U) {
             next_sec = cur_sec;
             next_ns = next_ns + interval_ns;
-        }  
+        } else {
+            next_sec = cur_sec;
+            while(next_ns + interval_ns > 1000000000U){
+                next_sec++;
+                next_ns -= 1000000000U;
+            } 
+            next_ns = next_ns + interval_ns;
+        }
+         
 
         if(global_t_arg->beat >= bs_R) {
             global_t_arg->beat = 1;
@@ -90,5 +96,7 @@ void * keep_rhythm(void *args) {
         if(interval_ns > 60000000000U) { //Checking for error and recover to saved value
             interval_ns = interval_ns_backup;
         }
+        global_t_arg->beat_interval = interval_ns / 1000000;
+
     }
 }
