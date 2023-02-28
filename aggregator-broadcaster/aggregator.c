@@ -1,10 +1,5 @@
 
 #include <stdint.h>
-
-#include "tempo_calculator.h"
-#include "beat-master.h"
-#include "aggregator.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +13,9 @@
 #include <time.h>
 #include <sched.h>
 
+#include "tempo_calculator.h"
+#include "beat-master.h"
+#include "aggregator.h"
 
 
 void main() {
@@ -50,6 +48,13 @@ void main() {
     global_t_arg.beat = 0;
     global_t_arg.beat_signature_L = 4;
     global_t_arg.beat_signature_R = 4;
+    global_t_arg.num_clients = 0;
+    global_t_arg.num_known_devices = 0;
+    for(int i = 0; i < MAX_CLIENTS; i++){
+        struct tempo_message tmp_msg;
+        tmp_msg.message_type = UNDEF_MSG;
+        global_t_arg.client_tempo_messages[i] = tmp_msg;
+    }
 
     udp_listener_t_ret = pthread_create(&udp_listener_thread, NULL, &udp_listener, &global_t_arg);
     buffer_watcher_t_ret = pthread_create(&buffer_watcher_thread, NULL, &buffer_watcher, &global_t_arg);
@@ -90,6 +95,7 @@ void * buffer_watcher(void *arg) {
     struct global_t_args *args = arg;
     int tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
     int tb_last_rollover = args->shared_buffer_stats->tempo_buffer_rollovers;
+    int i;
 
     while(1) {
         if(tb_last_write < args->shared_buffer_stats->tempo_buffer_last_write_ix) {
@@ -98,6 +104,19 @@ void * buffer_watcher(void *arg) {
             fprintf(stdout, "     message_type: %i, device_id: %i bpm: %i, confidence: %i, measure: %lld\n", 
                 msg.message_type, msg.device_id, msg.bpm, msg.confidence, msg.measure
             );
+            //Update client_tempo_messages
+            for(i = 0; i < args->num_known_devices; i++){
+                if(args->known_devices[i] == msg.device_id) {
+                    struct tempo_message store_msg;
+                    store_msg.message_type = TEMPO;
+                    store_msg.device_id = msg.device_id;
+                    store_msg.bpm = msg.bpm;
+                    store_msg.confidence = msg.confidence;
+                    store_msg.measure = msg.measure;
+                    store_msg.beat = msg.beat;
+                    args->client_tempo_messages[i] = store_msg;
+                }
+            }
             tb_last_write = args->shared_buffer_stats->tempo_buffer_last_write_ix;
         }
         if(tb_last_rollover < args->shared_buffer_stats->tempo_buffer_rollovers) {
@@ -134,8 +153,9 @@ static void * udp_broadcaster(void *arg) {
     time_broadcast_message.beat_signature_R = 4;
 
     broadcastaddr.sin_family = AF_INET;
-    broadcastaddr.sin_port = BROADCAST_PORT;
-    broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
+    broadcastaddr.sin_port = htons((unsigned short)BROADCAST_PORT);
+    // broadcastaddr.sin_addr.s_addr = INADDR_BROADCAST;
+    broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
     // inet_aton(BROADCAST_ADDRESS, &broadcastaddr.sin_addr);
     
     fprintf(stdout, "Broadcast address set to: ");
@@ -177,7 +197,7 @@ static void * udp_broadcaster(void *arg) {
             time_broadcast_message.beat_interval = global_t_arg->beat_interval;
 
             time_send_buffer[0] = time_broadcast_message;
-
+            //Send over broadcast channel:
             n = sendto(
                 sockfd, time_send_buffer, sizeof(struct time_message), 0, 
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
@@ -192,6 +212,16 @@ static void * udp_broadcaster(void *arg) {
                         time_broadcast_message.measure, time_broadcast_message.beat, n
                 );
             }
+            //Send to clients in client list:
+            // for(int i = 0; i < global_t_arg->num_clients; i++){
+            //     broadcastaddr.sin_addr.s_addr = global_t_arg->clients[i];
+            //     n = sendto(
+            //         sockfd, time_send_buffer, sizeof(struct time_message), 0,
+            //         (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
+            //     );
+            // }
+            //Set broadcast address back to network broadcast IP:
+            broadcastaddr.sin_addr.s_addr = inet_addr(BROADCAST_IP);
             last_beat = global_t_arg->beat;
         }
         //Next check for events in queue
@@ -283,7 +313,8 @@ static void * udp_listener(void *arg) {
     int n, i;
 
     int msg_type;
-    int client_address;
+    int client_address, client_device_id;
+    int new_client = 0;
 
     struct tempo_message t_msg;
     struct event_message e_msg;
@@ -335,11 +366,58 @@ static void * udp_listener(void *arg) {
             //htonl(*(global_t_arg->rcv_buffer + i))
 
             msg_type = htonl(*(receive_buffer));
+            client_device_id = htonl(*(receive_buffer+1));
 
-            fprintf(stdout, "\nMessage type: %i\n", msg_type);
+            fprintf(stdout, "\nMessage type: %i from device ID: %i\n", msg_type, client_device_id);
+        }
+
+        //Check if device ID is new
+        new_client = 1;
+        for(i = 0; i < global_t_arg->num_known_devices; i++){
+            if(client_device_id == global_t_arg->known_devices[i]){
+                new_client = 0;
+            }
+        }
+        if(new_client == 1){
+            global_t_arg->known_devices[global_t_arg->num_known_devices] = client_device_id;
+            global_t_arg->num_known_devices++;
+            new_client = 0;
+            fprintf(stdout, "Added new device ID: %i. I now know of %i devices.\n", client_device_id, global_t_arg->num_known_devices);
         }
 
         //handle message receipts by type:
+
+        if(msg_type == REGISTER_CLIENT) {
+            int address_in_client_list = 0;
+            struct sockaddr_in temp_addr;
+            fprintf(stdout, "Received registration message! Current clients:\n");
+
+            for(i = 0; i < global_t_arg->num_clients; i++){
+
+                temp_addr.sin_addr.s_addr = global_t_arg->clients[i];
+
+                fprintf(stdout, inet_ntoa(temp_addr.sin_addr));
+                fprintf(stdout, "\n");
+
+                if(clientaddr.sin_addr.s_addr == global_t_arg->clients[i]){
+                    address_in_client_list = 1;
+                    temp_addr.sin_addr.s_addr = clientaddr.sin_addr.s_addr;
+                    fprintf(stdout, "Client already registered: ");
+                    fprintf(stdout, inet_ntoa(temp_addr.sin_addr));
+                    fprintf(stdout, "\n");
+                }
+            }
+            if(address_in_client_list == 0 && global_t_arg->num_clients < MAX_CLIENTS){
+                global_t_arg->clients[global_t_arg->num_clients] = clientaddr.sin_addr.s_addr;
+                global_t_arg->num_clients++;
+                fprintf(stdout, "Added client: ");
+                fprintf(stdout, inet_ntoa(clientaddr.sin_addr));
+                fprintf(stdout, "\n");
+            } else {
+                fprintf(stdout, "Did not add client!\n");
+            }
+            address_in_client_list = 0;
+        }
 
         if(msg_type == TEMPO) {
             fprintf(stdout, "Received tempo message!\n");

@@ -10,6 +10,10 @@
 
 #define BROADCAST_PORT 54555
 
+#define MAX_CLIENTS 20
+
+#define DEFAULT_BPM 60
+
 
 struct global_t_args {
     struct tempo_message        *tempo_buffer;
@@ -21,6 +25,11 @@ struct global_t_args {
     uint32_t measure;
     uint32_t beat;
     uint32_t beat_interval;
+    uint32_t clients[MAX_CLIENTS]; //IPs who registered for messages
+    uint32_t known_devices[MAX_CLIENTS]; //Device IDs of all devices who sent packets
+    struct tempo_message client_tempo_messages[MAX_CLIENTS];//Store most recent client tempo messages
+    int num_clients;
+    int num_known_devices;
 };
 
 struct shared_buffer_stats {
