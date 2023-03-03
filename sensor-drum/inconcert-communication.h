@@ -23,6 +23,9 @@
 #define TIME  2
 #define REGISTER_CLIENT 3
 
+//Event types:
+#define DRUM_HIT 808
+
 //Message structs:
 struct tempo_message {
     uint32_t message_type;

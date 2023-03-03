@@ -27,7 +27,7 @@ void * keep_rhythm(void *args) {
     fprintf(stdout, "Calculating next beat ms\n");
 
     //Set to default 1 BPS until we get tempo data
-    int default_bpm = 120;
+    int default_bpm = DEFAULT_BPM;
     interval_ns = 60000000000U / default_bpm;
     global_t_arg->beat_interval = interval_ns / 100000;
 
