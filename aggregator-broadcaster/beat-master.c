@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define VERBOSE
+// #define VERBOSE
 
 uint32_t bs_L, bs_R;
 double ms_per_beat;

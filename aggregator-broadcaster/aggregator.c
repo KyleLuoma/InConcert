@@ -427,23 +427,29 @@ static void * udp_listener(void *arg) {
             t_msg.confidence    = ntohl(*(receive_buffer + 3));
             t_msg.measure       = ntohl(*(receive_buffer + 4));
             t_msg.beat          = ntohl(*(receive_buffer + 5));
-
-            write_to_tempo_buffer(global_t_arg->tempo_buffer, t_msg, buffer_stats);
+            if (t_msg.bpm > 0) {
+                write_to_tempo_buffer(global_t_arg->tempo_buffer, t_msg, buffer_stats);
+            } 
+            
         } else if(msg_type == EVENT) {
-            fprintf(stdout, "Received event message!\n");
+            fprintf(stdout, "Received event message ");
             e_msg.message_type      = msg_type;
             e_msg.device_id         = ntohl(*(receive_buffer + 1));
             e_msg.event_type        = ntohl(*(receive_buffer + 2));
             e_msg.measure           = ntohl(*(receive_buffer + 3));
             e_msg.beat              = ntohl(*(receive_buffer + 4));
             e_msg.num_used_params   = ntohl(*(receive_buffer + 5));
-            for(i = 0; i < e_msg.num_used_params; i++) {
+            fprintf(stdout, "With %i parameters.\n", e_msg.num_used_params);
+            if(e_msg.num_used_params < 11) { //Prevent OOB attacks / errors
+                for(i = 0; i < e_msg.num_used_params; i++) {
                 if(i < e_msg.num_used_params) {
                     e_msg.params[i] = ntohl(*(receive_buffer + (6 + i)));
                 } else {
                     e_msg.params[i] = 0;
                 }
             }
+            }
+            
 
             write_to_event_buffer(global_t_arg->event_buffer, e_msg, buffer_stats);
         } else if(msg_type == TIME) {
