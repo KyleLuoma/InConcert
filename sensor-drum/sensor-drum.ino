@@ -44,6 +44,7 @@ unsigned long snare_intvl, cymbal_intvl, bass_intvl, tom_intvl, any_sample_intvl
 uint16_t any_sample_intervals[INTERVAL_LIMIT] = {0};
 uint16_t asi_ix = 0; // rolling index, reset at INTERVAL_LIMIT
 unsigned long calculated_tempo;
+uint32_t tempo_confidence = 100;
 
 const int ledPin = LED_BUILTIN; 
 int led_state = LOW;
@@ -58,6 +59,7 @@ const int AGG_PACKET_SIZE = 255;
 uint32_t tempo_msg_buffer[5];
 char incoming_udp_buffer[AGG_PACKET_SIZE]; //big enough to handle time or event messages
 uint32_t registration_message_buffer[2];
+uint32_t event_msg_buffer[16];
 
 struct time_message current_time;
 unsigned long last_time_message_ms, next_beat_ms;
@@ -191,19 +193,58 @@ unsigned long registerWithHost(IPAddress& address) {
   udp_out.endPacket();
 }
 
-unsigned long sendAGGpacket(IPAddress& address) {
+unsigned long sendHitEventMessage(
+  IPAddress& address,
+  uint32_t snare_hit, uint32_t snare_velocity,
+  uint32_t bass_hit, uint32_t bass_velocity,
+  uint32_t cymbal_hit, uint32_t cymbal_velocity,
+  uint32_t tom_hit, uint32_t tom_velocity,
+  uint32_t beat, uint32_t measure
+) {
   #ifdef DEBUG_PRINT
-  Serial.print("Sending Packet to Agg Server ");
+  Serial.print("Sending Hit Event Message to Agg Server");
+  #endif
+
+  memset(event_msg_buffer, 0, sizeof(struct event_message));
+
+  event_msg_buffer[0] = htonl(EVENT);
+  event_msg_buffer[1] = htonl(DEVICE_ID);
+  event_msg_buffer[2] = htonl(DRUM_HIT);
+  event_msg_buffer[3] = htonl(measure);
+  event_msg_buffer[4] = htonl(beat);
+  event_msg_buffer[5] = 8; //used params
+  event_msg_buffer[6] = htonl(snare_hit);
+  event_msg_buffer[7] = htonl(snare_velocity);
+  event_msg_buffer[8] = htonl(bass_hit);
+  event_msg_buffer[9] = htonl(bass_velocity);
+  event_msg_buffer[10] = htonl(cymbal_hit);
+  event_msg_buffer[11] = htonl(cymbal_velocity);
+  event_msg_buffer[12] = htonl(tom_hit);
+  event_msg_buffer[13] = htonl(tom_velocity);
+
+  udp_out.beginPacket(address, SEND_PORT);
+  udp_out.write((uint8_t*)event_msg_buffer, sizeof(struct event_message));
+  udp_out.endPacket();
+  udp_out.flush();
+}
+
+unsigned long sendTempoMessage(
+  IPAddress& address, 
+  uint32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
+  ){
+  #ifdef DEBUG_PRINT
+  Serial.print("Sending Tempo Message to Agg Server ");
   Serial.println(AGGServer);
   #endif
 
   memset(tempo_msg_buffer, 0, sizeof(struct tempo_message));
 
-  tempo_msg_buffer[0] = htonl(0);            //message type
-  tempo_msg_buffer[1] = htonl(DEVICE_ID);    //device id
-  tempo_msg_buffer[2] = htonl(60);          //tempo
-  tempo_msg_buffer[3] = htonl(94);           //confidence
-  tempo_msg_buffer[5] = htonl(10001);        //timestamp
+  tempo_msg_buffer[0] = htonl(TEMPO);
+  tempo_msg_buffer[1] = htonl(DEVICE_ID);
+  tempo_msg_buffer[2] = htonl(tempo);          
+  tempo_msg_buffer[3] = htonl(confidence);          
+  tempo_msg_buffer[5] = htonl(measure);    
+  tempo_msg_buffer[6] = htonl(beat);
 
   udp_out.beginPacket(address, SEND_PORT); //AGG requests are to port 54534
   udp_out.write((uint8_t*)tempo_msg_buffer, sizeof(struct tempo_message));
@@ -396,7 +437,12 @@ void loop() {
   
   //1 Send tempo packet
   if(has_wifi == 1 && loopcounter % 125 == 0){
-    sendAGGpacket(AGGServer);
+    //int32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
+    sendTempoMessage(
+      AGGServer, 
+      (uint32_t)calculated_tempo, tempo_confidence, 
+      (uint32_t)cur_beat, (uint32_t)cur_measure
+    );
   }
 
   //2 Sample bass
@@ -457,7 +503,21 @@ void loop() {
 
   next_sample = getNextSampleUS(next_sample);
 
-  //5 Send events in queue
+  //5 Send event message if any hits are active
+  if((snare_hit + cymbal_hit + tom_hit + bass_hit) > 0) {
+    sendHitEventMessage(
+      AGGServer,
+      snare_hit, (snare * snare_hit), //send velocity if snare_hit, else will be 0
+      bass_hit, (bass * bass_hit),
+      cymbal_hit, (cymbal * cymbal_hit),
+      tom_hit, (tom * tom_hit),
+      cur_beat, cur_measure
+    );
+    snare_hit = 0;
+    cymbal_hit = 0;
+    bass_hit = 0;
+    tom_hit = 0;
+  }
 
   //periodically reset udp sockets
   if(loopcounter % 1000 == 0){
@@ -560,10 +620,7 @@ void loop() {
   Serial.print(tom); Serial.print("\n");
   //Hit determination
 #endif
-  snare_hit = 0;
-  cymbal_hit = 0;
-  bass_hit = 0;
-  tom_hit = 0;
+  
   loopcounter++;
   while(micros() < next_sample){};
 }
