@@ -22,8 +22,9 @@
 #define IGNORE_PERIOD 10 //Number of samples to ignore after a hit detection
 #define INTERVAL_LIMIT 64 //Number of interval values to store for analysis
 #define INTERVAL_MS_MIN 200 // Limit to 300 BPM and lower to minimize false positive beats
+#define INTERVAL_MS_TERMINATE 5000// Maximum interval before resetting counter (typically the end of a song)
 #define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
-#define MAX_US 4294967295U //Highest possible uS value
+#define MAX_US 4294967294U //Highest possible uS value
 
 // #define SERIAL_PRINT
 // #define DEBUG_PRINT
@@ -47,7 +48,9 @@ unsigned long calculated_tempo;
 uint32_t tempo_confidence = 100;
 
 const int ledPin = LED_BUILTIN; 
+const int blueLedPin = 0;
 int led_state = LOW;
+int blueLed_state = LOW;
 int has_wifi = 1;
 int wifi_status;
 int udp_in_last_generation = 0;
@@ -115,6 +118,8 @@ void setup() {
   }
 
   pinMode(ledPin, OUTPUT);
+  pinMode(blueLedPin, INPUT);
+  digitalWrite(blueLedPin, LOW);
 
   int16_t max_s = 0;
   int16_t max_b = 0;
@@ -212,7 +217,7 @@ unsigned long sendHitEventMessage(
   event_msg_buffer[2] = htonl(DRUM_HIT);
   event_msg_buffer[3] = htonl(measure);
   event_msg_buffer[4] = htonl(beat);
-  event_msg_buffer[5] = 8; //used params
+  event_msg_buffer[5] = htonl((uint32_t)8); //used params
   event_msg_buffer[6] = htonl(snare_hit);
   event_msg_buffer[7] = htonl(snare_velocity);
   event_msg_buffer[8] = htonl(bass_hit);
@@ -358,7 +363,7 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
            most_likely_interval;
   unsigned long most_likely_tempo = 0;
   min_total_error = 1000000;
-  for(unsigned long check_intvl = 200; check_intvl < 1200; check_intvl += 25){
+  for(unsigned long check_intvl = 300; check_intvl < 1200; check_intvl += 25){
     total_error = 0;
     //Cycle through each recorded interval
     for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
@@ -399,7 +404,7 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
 // 4    Sample HiHat
 // 5    Send events in queue, periodically reset udp sockets
 // 6    Sample Tom
-// 7    Recalculate tempo and progress time
+// 7    Recalculate tempo (aperiodic, 7ms run time) and progress time 
 // 8    Write to terminal
 
 unsigned int loopcounter = 0;
@@ -436,7 +441,7 @@ void loop() {
   next_sample = getNextSampleUS(next_sample);
   
   //1 Send tempo packet
-  if(has_wifi == 1 && loopcounter % 125 == 0){
+  if(has_wifi == 1 && loopcounter % 500 == 0){
     //int32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
     sendTempoMessage(
       AGGServer, 
@@ -575,6 +580,11 @@ void loop() {
     any_sample_intvl_stored = 1;
   }
 
+  // Reset any_sample_intervals counter if interval is too high
+  if(any_sample_intvl > INTERVAL_MS_TERMINATE){
+    asi_ix = 0;
+  }
+
 
   // and progress time
 
@@ -585,6 +595,12 @@ void loop() {
     #endif
     last_beat = cur_beat;
     last_measure = cur_measure;
+
+    if(blueLed_state == HIGH) {
+      blueLed_state = LOW;
+    } else {
+      blueLed_state = HIGH;
+    }
   } else if(millis() > next_beat_ms) { //Otherwise update with last known data
     next_beat_ms = millis() + cur_beat_interval;
     if(cur_beat >= current_time.beat_signature_R){
@@ -601,8 +617,15 @@ void loop() {
     }   
     last_beat = cur_beat;
     last_measure = cur_measure;
+
+    if(blueLed_state == HIGH) {
+      blueLed_state = LOW;
+    } else {
+      blueLed_state = HIGH;
+    }
   } 
 
+  digitalWrite(blueLedPin, blueLed_state);
 
   // 8 Flash LED and Write to terminal
   if(snare > snare_th || cymbal > cymbal_th || bass > bass_th || tom > tom_th){
