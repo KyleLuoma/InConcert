@@ -18,14 +18,17 @@
 #define SAMPLE_INTERVAL 2  //MS between sensor samples (x4 samples)
 #define SAMPLE_INTERVAL_US 2000 //uS between sensor samples
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
-#define INPUT_THRESHOLD 50 //Amount of signal to increase above idle to register as a hit
-#define IGNORE_PERIOD 30 //Number of samples to ignore after a hit detection
-#define INTERVAL_LIMIT 32 //Number of interval values to store for analysis
+#define INPUT_THRESHOLD 250 //Amount of signal to increase above idle to register as a hit
+#define IGNORE_PERIOD 10 //Number of samples to ignore after a hit detection
+#define INTERVAL_LIMIT 64 //Number of interval values to store for analysis
+#define INTERVAL_MS_MIN 200 // Limit to 300 BPM and lower to minimize false positive beats
 #define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
 #define MAX_US 4294967295U //Highest possible uS value
 
 // #define SERIAL_PRINT
 // #define DEBUG_PRINT
+#define EVENT_PRINT
+#define TEMPO_PRINT
 
 
 Adafruit_ADS1115 ads;
@@ -33,10 +36,14 @@ Adafruit_ADS1115 ads;
 int16_t snare, cymbal, bass, tom; //Use for storing sample inputs
 int16_t snare_th, cymbal_th, bass_th, tom_th;//Input thresholds
 byte snare_ignore, cymbal_ignore, bass_ignore, tom_ignore; //Ignore flags
-byte snare_hit, cymbal_hit, bass_hit, tom_hit; //Hit state 
+byte snare_hit, cymbal_hit, bass_hit, tom_hit, any_hit; //Hit state 
+byte any_sample_intvl_stored = 0;
 unsigned long sample_time;
-unsigned long snare_hit_ms, cymbal_hit_ms, bass_hit_ms, tom_hit_ms;
-unsigned long snare_intvl, cymbal_intvl, bass_intvl, tom_intvl;
+unsigned long snare_hit_ms, cymbal_hit_ms, bass_hit_ms, tom_hit_ms, any_hit_ms;
+unsigned long snare_intvl, cymbal_intvl, bass_intvl, tom_intvl, any_sample_intvl;
+uint16_t any_sample_intervals[INTERVAL_LIMIT] = {0};
+uint16_t asi_ix = 0; // rolling index, reset at INTERVAL_LIMIT
+unsigned long calculated_tempo;
 
 const int ledPin = LED_BUILTIN; 
 int led_state = LOW;
@@ -55,6 +62,7 @@ uint32_t registration_message_buffer[2];
 struct time_message current_time;
 unsigned long last_time_message_ms, next_beat_ms;
 int16_t cur_measure, cur_beat, cur_beat_interval, last_beat, last_measure;
+int16_t cur_signature = 4;
 
 
 
@@ -112,6 +120,7 @@ void setup() {
   int16_t max_tom = 0;
   //document baseline signal - no events
   //user should not hit drums during initialization period
+  Serial.print("Learning sensor thresholds..\n");
   for(int i = 0; i < INIT_CYCLES; i++) {
     if(led_state == LOW){
       led_state = HIGH;
@@ -143,7 +152,7 @@ void setup() {
   }
   // --- Initialize status variables ---
   snare_th = max_s + INPUT_THRESHOLD;
-  cymbal_th = max_c + 10;
+  cymbal_th = max_c + INPUT_THRESHOLD;
   bass_th = max_b + INPUT_THRESHOLD;
   tom_th = max_tom + INPUT_THRESHOLD;
   cur_beat_interval = 500;
@@ -157,11 +166,13 @@ void setup() {
   cymbal_hit = 0;
   bass_hit = 0;
   tom_hit = 0;
+  any_hit = 0;
 
   snare_hit_ms = 0;
   cymbal_hit_ms = 0;
   bass_hit_ms = 0;
   tom_hit_ms = 0;
+  any_hit_ms = 0;
 }
 
 unsigned long loop_start_time;
@@ -287,6 +298,57 @@ unsigned long inline getNextSampleUS(unsigned long last_sample_time) {
   return next_sample_time;
 }
 
+unsigned long absolute_value(int number){
+  if(number < 0){
+    return number * -1;
+  }
+  return number;
+}
+
+//Perform tempo calculation algorithm on full interval array
+unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
+  //Cycle through possible intervals from low to high (300 BPM to 50 BPM)
+  #ifdef TEMPO_PRINT
+  Serial.print("Starting tempo calculation.\n");
+  unsigned long start = millis();
+  #endif
+  unsigned long total_error, min_total_error, 
+           min_intvl_error, intvl_error,
+           most_likely_interval;
+  unsigned long most_likely_tempo = 0;
+  min_total_error = 1000000;
+  for(unsigned long check_intvl = 200; check_intvl < 1200; check_intvl += 25){
+    total_error = 0;
+    //Cycle through each recorded interval
+    for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
+      //Find the minimum distance
+      min_intvl_error = 1000000;
+      for(unsigned long multiple = 1; multiple <= signature; multiple++){
+        intvl_error = absolute_value((int)(intervals[ix] - (multiple * check_intvl)));
+        if(intvl_error < min_intvl_error) {
+          min_intvl_error = intvl_error;
+        }
+      }
+      //add minimum error for the checked interval to total error
+      total_error += min_intvl_error;
+    }
+    if(total_error < min_total_error){
+      min_total_error = total_error;
+      most_likely_interval = check_intvl;
+      #ifdef TEMPO_PRINT
+      Serial.print("Updated most likely interval to "); Serial.print(most_likely_interval); Serial.print("\n");
+      #endif
+    }
+  }
+  most_likely_tempo = 60000 / most_likely_interval;
+  #ifdef TEMPO_PRINT
+  Serial.print("Finished tempo calculation. Time: "); Serial.print(millis() - start); Serial.print(" MS \n");
+  Serial.print("Most likely tempo: "); Serial.print(most_likely_tempo); Serial.print(" BPM\n");
+  Serial.print("Most likely interval: "); Serial.print(most_likely_interval); Serial.print(" MS\n");
+  #endif
+  return most_likely_tempo;
+}
+
 //Operates on a periodic schedule:
 // ms   event
 // 0    Sample Snare
@@ -311,11 +373,23 @@ void loop() {
     if(snare_hit_ms > 0){
       snare_intvl = sample_time - snare_hit_ms;
     }
+    if(any_hit_ms > 0 && sample_time - any_hit_ms > INTERVAL_MS_MIN){
+      any_sample_intvl = sample_time - any_hit_ms;
+      any_sample_intvl_stored = 0;
+    }
     snare_hit_ms = sample_time;
+    any_hit_ms = sample_time;
     snare_hit = 1;
     snare_ignore = IGNORE_PERIOD;
+    #ifdef EVENT_PRINT
+    Serial.print("HIT: SNARE VELOCITY: "); Serial.print(snare); 
+    Serial.print(" INTERVALs SNARE: "); Serial.print(snare_intvl);
+    Serial.print(" ANY: "); Serial.print(any_sample_intvl); Serial.print("\n");
+    #endif
   } else if (snare_ignore > 0) {
     snare_ignore--;
+  } else {
+    snare_hit = 0;
   }
 
   next_sample = getNextSampleUS(next_sample);
@@ -328,7 +402,28 @@ void loop() {
   //2 Sample bass
   while(micros() < next_sample){};
   bass = ads.readADC_SingleEnded(BASS);
-
+  sample_time = millis();
+  if(bass_ignore == 0 && bass > bass_th) {
+    if(bass_hit_ms > 0){
+      bass_intvl = sample_time - bass_hit_ms;
+    }
+    if(any_hit_ms > 0 && sample_time - any_hit_ms > INTERVAL_MS_MIN) {
+      any_sample_intvl = sample_time - any_hit_ms;
+      any_sample_intvl_stored = 0;
+    }
+    bass_hit_ms = sample_time;
+    any_hit_ms = sample_time;
+    bass_hit = 1;
+    bass_ignore = IGNORE_PERIOD;
+    #ifdef EVENT_PRINT
+    Serial.print("HIT: BASS VELOCITY: "); Serial.print(bass); 
+    Serial.print(" INTERVALs BASS: "); Serial.print(bass_intvl);
+    Serial.print(" ANY: "); Serial.print(any_sample_intvl); Serial.print("\n");
+    #endif
+  } else if (bass_ignore > 0) {
+    bass_ignore--;
+  } 
+  
   next_sample = getNextSampleUS(next_sample);
 
   //3 Get time synch
@@ -338,6 +433,27 @@ void loop() {
   //4 Sample hihat  
   while(micros() < next_sample){};
   cymbal = ads.readADC_SingleEnded(CYMBAL);
+  sample_time = millis();
+  if(cymbal_ignore == 0 && cymbal > cymbal_th) {
+    if(cymbal_hit_ms > 0){
+      cymbal_intvl = sample_time - cymbal_hit_ms;
+    }
+    if(any_hit_ms > 0 && sample_time - any_hit_ms > INTERVAL_MS_MIN) {
+      any_sample_intvl = sample_time - any_hit_ms;
+      any_sample_intvl_stored = 0;
+    }
+    cymbal_hit_ms = sample_time;
+    any_hit_ms = sample_time;
+    cymbal_hit = 1;
+    cymbal_ignore = IGNORE_PERIOD;
+    #ifdef EVENT_PRINT
+    Serial.print("HIT: CYMBAL VELOCITY: "); Serial.print(cymbal); 
+    Serial.print(" INTERVALs CYMBAL: "); Serial.print(cymbal_intvl);
+    Serial.print(" ANY: "); Serial.print(any_sample_intvl); Serial.print("\n");
+    #endif
+  } else if (cymbal_ignore > 0) {
+    cymbal_ignore--;
+  } 
 
   next_sample = getNextSampleUS(next_sample);
 
@@ -357,10 +473,50 @@ void loop() {
   //6 Sample Tom
   while(micros() < next_sample){};
   tom = ads.readADC_SingleEnded(TOM);
+  sample_time = millis();
+  if(tom_ignore == 0 && tom > tom_th) {
+    if(tom_hit_ms > 0){
+      tom_intvl = sample_time - tom_hit_ms;
+    }
+    if(any_hit_ms > 0 && sample_time - any_hit_ms > INTERVAL_MS_MIN) {
+      any_sample_intvl = sample_time - any_hit_ms;
+      any_sample_intvl_stored = 0;
+    }
+    tom_hit_ms = sample_time;
+    any_hit_ms = sample_time;
+    tom_hit = 1;
+    tom_ignore = IGNORE_PERIOD;
+    #ifdef EVENT_PRINT
+    Serial.print("HIT: TOM VELOCITY: "); Serial.print(tom); 
+    Serial.print(" INTERVALs TOM: "); Serial.print(tom_intvl);
+    Serial.print(" ANY: "); Serial.print(any_sample_intvl); Serial.print("\n");
+    #endif
+  } else if (tom_ignore > 0){
+    tom_ignore--;
+  }
 
   next_sample = getNextSampleUS(next_sample);
 
-  // 7 Recalculate tempo and progress time
+  // 7 Recalculate tempo 
+  //Register most recent interval and mark it as stored
+  if(any_sample_intvl > 0 && any_sample_intvl_stored == 0) {
+    any_sample_intervals[asi_ix] = (uint16_t)any_sample_intvl;
+    asi_ix++;
+    if(asi_ix == INTERVAL_LIMIT){
+      asi_ix = 0;
+      #ifdef EVENT_PRINT
+      Serial.print("INTERVAL VALUE DUMP:\n");
+      for(i = 0; i < INTERVAL_LIMIT; i++){
+        Serial.print(any_sample_intervals[i]); Serial.print(" MS\n");
+      }
+      #endif
+      calculated_tempo = calculate_tempo_full(any_sample_intervals, 4);
+    }
+    any_sample_intvl_stored = 1;
+  }
+
+
+  // and progress time
 
   if (last_beat != cur_beat || last_measure != cur_measure){ //First check if we got an update from UDP
     #ifdef DEBUG_PRINT
@@ -404,7 +560,10 @@ void loop() {
   Serial.print(tom); Serial.print("\n");
   //Hit determination
 #endif
-
+  snare_hit = 0;
+  cymbal_hit = 0;
+  bass_hit = 0;
+  tom_hit = 0;
   loopcounter++;
   while(micros() < next_sample){};
 }
