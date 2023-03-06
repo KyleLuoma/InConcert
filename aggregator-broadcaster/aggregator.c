@@ -251,10 +251,10 @@ static void * udp_broadcaster(void *arg) {
                 (struct sockaddr *)&broadcastaddr, sizeof(struct sockaddr_in)
                 );
                 if(n > 0){
-                    fprintf(stdout, 
-                            "Event broadcast of size %i forwarded from device %i\n", 
-                            n, event_broadcast_message.device_id
-                            );
+                    // fprintf(stdout, 
+                    //         "Event broadcast of size %i forwarded from device %i\n", 
+                    //         n, event_broadcast_message.device_id
+                    //         );
                 } else {
                     fprintf(stdout, "Unable to send event message from device %i, failure with code %i\n",
                            event_broadcast_message.device_id, n
@@ -343,7 +343,7 @@ static void * udp_listener(void *arg) {
 
         n = recvfrom(sockfd, receive_buffer, RECEIVE_BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
         if(n < 0) {
-            fprintf(stdout, "\nrecvfrom error \n");
+            // fprintf(stdout, "\nrecvfrom error \n");
         } else {
             fprintf(stdout, "\nReceived UDP packet \n");
         }
@@ -360,7 +360,7 @@ static void * udp_listener(void *arg) {
         if(hostaddrp == NULL) {
             //do error stuff
         } else {
-            fprintf(stdout, hostaddrp);
+            // fprintf(stdout, hostaddrp);
 
             //How to read from buffer:
             //htonl(*(global_t_arg->rcv_buffer + i))
@@ -432,14 +432,14 @@ static void * udp_listener(void *arg) {
             } 
             
         } else if(msg_type == EVENT) {
-            fprintf(stdout, "Received event message ");
+            // fprintf(stdout, "Received event message ");
             e_msg.message_type      = msg_type;
             e_msg.device_id         = ntohl(*(receive_buffer + 1));
             e_msg.event_type        = ntohl(*(receive_buffer + 2));
             e_msg.measure           = ntohl(*(receive_buffer + 3));
             e_msg.beat              = ntohl(*(receive_buffer + 4));
             e_msg.num_used_params   = ntohl(*(receive_buffer + 5));
-            fprintf(stdout, "With %i parameters.\n", e_msg.num_used_params);
+            // fprintf(stdout, "With %i parameters.\n", e_msg.num_used_params);
             if(e_msg.num_used_params < 11) { //Prevent OOB attacks / errors
                 for(i = 0; i < e_msg.num_used_params; i++) {
                 if(i < e_msg.num_used_params) {
@@ -449,8 +449,6 @@ static void * udp_listener(void *arg) {
                 }
             }
             }
-            
-
             write_to_event_buffer(global_t_arg->event_buffer, e_msg, buffer_stats);
         } else if(msg_type == TIME) {
             fprintf(stdout, "Received time message!\n");
@@ -482,19 +480,19 @@ int write_to_event_buffer(void *event_buffer, struct event_message message, void
         stats->event_buffer_rollovers++;
     }
 
-    fprintf(stdout, "Writing event to buffer\n");
-    fprintf(stdout, "Message type: %i, Device ID: %i, Event Type: %i, measure: %i, beat: %i, num_params: %i\n", 
-        message.message_type,
-        message.device_id,
-        message.event_type,
-        message.measure,
-        message.beat,
-        message.num_used_params
-    );
+    // fprintf(stdout, "Writing event to buffer\n");
+    // fprintf(stdout, "Message type: %i, Device ID: %i, Event Type: %i, measure: %i, beat: %i, num_params: %i\n", 
+    //     message.message_type,
+    //     message.device_id,
+    //     message.event_type,
+    //     message.measure,
+    //     message.beat,
+    //     message.num_used_params
+    // );
 
     stats->event_buffer_last_write_ix++;
     event_buff[stats->event_buffer_last_write_ix] = message;
-    fprintf(stdout, "Wrote message to event buffer position %i\n", stats->event_buffer_last_write_ix);
+    // fprintf(stdout, "Wrote message to event buffer position %i\n", stats->event_buffer_last_write_ix);
     stats->event_buffer_locked = 0;
 }
 

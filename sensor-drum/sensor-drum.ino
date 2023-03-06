@@ -353,7 +353,7 @@ unsigned long absolute_value(int number){
 
 //Perform tempo calculation algorithm on full interval array
 unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
-  //Cycle through possible intervals from low to high (300 BPM to 50 BPM)
+  //Cycle through possible intervals from low to high (~170 BPM to 50 BPM)
   #ifdef TEMPO_PRINT
   Serial.print("Starting tempo calculation.\n");
   unsigned long start = millis();
@@ -363,7 +363,7 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
            most_likely_interval;
   unsigned long most_likely_tempo = 0;
   min_total_error = 1000000;
-  for(unsigned long check_intvl = 300; check_intvl < 1200; check_intvl += 25){
+  for(unsigned long check_intvl = 350; check_intvl < 1200; check_intvl += 25){
     total_error = 0;
     //Cycle through each recorded interval
     for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
