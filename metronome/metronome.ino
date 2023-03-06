@@ -15,6 +15,7 @@ int led_status_array[NUM_LEDS] = {LOW};
 int buzzer_pin = 9;
 int button_pin = 10;
 int button_state = LOW;
+int alert_led_pin = 11;
 
 char ssid[] = SSID;
 char pw[] = PW;
@@ -52,6 +53,8 @@ void setup() {
     pinMode(buzzer_pin, OUTPUT);
     digitalWrite(buzzer_pin, LOW);
     pinMode(button_pin, INPUT);
+    pinMode(alert_led_pin, OUTPUT);
+    digitalWrite(alert_led_pin, HIGH);
 
 //    beep(int freq, unsigned long duration_ms)
     for(int i = 100; i < 700; i += 50){
@@ -149,6 +152,77 @@ uint32_t get_uint32_from_charbuffer(char * charbuffer) {
   return return_val;           
 }
 
+unsigned long get_unsigned_long_from_buffer(char * receive_buffer, int long_ix) {
+  int offset = long_ix * 4;
+  unsigned long high_word = word(receive_buffer[offset], receive_buffer[offset + 1]);
+  unsigned long low_word = word(receive_buffer[offset + 2], receive_buffer[offset + 3]);
+  unsigned long message_type = high_word << 16 | low_word;
+  return htonl(message_type);
+}
+
+
+//Same as retrieve_udp_packet, but uses read approach found here:
+//https://docs.arduino.cc/tutorials/communication/wifi-nina-examples?_gl=1*1216s9b*_ga*MTcyNTg5Nzc4LjE2NzQ1ODI4MjQ.*_ga_NEXN8H46L5*MTY3ODEyMTc5Ni40Mi4xLjE2NzgxMjIyNDIuMC4wLjA.#wifinina-udp-ntp-client
+int retrieve_udp_packet_using_word(
+    char * receive_buffer, 
+    struct tempo_message * tempo, 
+    struct time_message * time
+) {
+   int packet_size = 0;
+   packet_size = udp_in.parsePacket();
+   if(packet_size > 0){
+      udp_in.read(receive_buffer, 255);
+      unsigned long message_type = get_unsigned_long_from_buffer(receive_buffer, 0);
+//      Serial.print("Using word the message type is: ");
+//      Serial.print(message_type);
+//      Serial.print("\n");
+      if(message_type == TIME) {
+        time->message_type = message_type;
+        time->device_id = get_unsigned_long_from_buffer(receive_buffer, 1);
+        time->beat_signature_L = get_unsigned_long_from_buffer(receive_buffer, 2);
+        time->beat_signature_R = get_unsigned_long_from_buffer(receive_buffer, 3);
+        time->measure = get_unsigned_long_from_buffer(receive_buffer, 4);
+        time->beat = get_unsigned_long_from_buffer(receive_buffer, 5);
+//        time->beat_interval = get_unsigned_long_from_buffer(receive_buffer, 6);
+//        Serial.print("\ndevice_id: "); Serial.print(time->device_id);
+//        Serial.print("\nb_sL: "); Serial.print(time->beat_signature_L);
+//        Serial.print("\nb_sR: "); Serial.print(time->beat_signature_R);
+//        Serial.print("\nMeasure: "); Serial.print(time->measure);
+//        Serial.print("\nBeat: "); Serial.print(time->beat);
+//        Serial.print("\nInterval: "); Serial.print(time->beat_interval);Serial.print("\n");
+      } else if (message_type == TEMPO) {
+        tempo->message_type = message_type;
+        tempo->device_id = get_unsigned_long_from_buffer(receive_buffer, 1);
+        tempo->bpm = get_unsigned_long_from_buffer(receive_buffer, 3);
+        tempo->confidence = get_unsigned_long_from_buffer(receive_buffer, 4);
+        tempo->measure = get_unsigned_long_from_buffer(receive_buffer, 5);
+        tempo->beat = get_unsigned_long_from_buffer(receive_buffer, 6);
+        Serial.println("Tempo Struct Fields and Values:");
+        Serial.print("message_type: "); Serial.println(tempo->message_type);
+        Serial.print("device_id: "); Serial.println(tempo->device_id);
+        Serial.print("bpm: "); Serial.println(tempo->bpm);
+        Serial.print("confidence: "); Serial.println(tempo->confidence);
+        Serial.print("measure: "); Serial.println(tempo->measure);
+        Serial.print("beat: "); Serial.println(tempo->beat);
+      } else if (message_type == EVENT) {
+        Serial.println("Event Struct Fields and Values:");
+        Serial.print("message_type: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 0));
+        Serial.print("device_id: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 1));
+        Serial.print("event_type: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 2));
+        Serial.print("measure: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 3));
+        Serial.print("beat: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 4));
+        Serial.print("Num params: "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 5));
+        unsigned long num_params = (get_unsigned_long_from_buffer(receive_buffer, 5));
+        for(int i = 0; i < num_params; i++){
+          Serial.print("  Param "); Serial.print(i); Serial.print(": "); Serial.println(get_unsigned_long_from_buffer(receive_buffer, 6 + i));
+        }
+      }
+      if(message_type >= 0 && message_type < 4) {
+        return message_type;
+      }
+   }
+   return -1;
+}
 
 
 //Checks for incomingudp packet and updates appropriate message struct
@@ -232,7 +306,7 @@ void loop() {
         } 
         if(active_led <= left_bound) {
             direction = 1;
-            Serial.print("Tick.\n");
+//            Serial.print("Tick.\n");
             if(r_signature == 4){
                 led_status_array[0] = HIGH;
                 led_status_array[6] = LOW;
@@ -244,7 +318,7 @@ void loop() {
         } 
         if(active_led >= right_bound) {
             direction = -1;
-            Serial.print("Tock.\n");
+//            Serial.print("Tock.\n");
             if(r_signature == 4){
                 led_status_array[6] = HIGH;
                 led_status_array[0] = LOW; 
@@ -262,12 +336,18 @@ void loop() {
         
         next_movement += interval;
     }
+
+    // retrieve_udp_packet_using_word(
+    //   incoming_udp_buffer,
+    //   &latest_tempo_message,
+    //   &latest_time_message
+    // );
     
     last_message_type = retrieve_udp_packet(
       incoming_udp_buffer, 
       &latest_tempo_message, 
       &latest_time_message
-      );
+    );
 
     if(last_message_type == TIME){
       if(tempo_updated == 1){
@@ -295,6 +375,8 @@ void loop() {
         interval = interval / 2;
       }
       Serial.print("Received tempo message.\n");
+      beep(200, 50);
+      beep(300, 50);
     }
     last_message_type = -1;
 }
