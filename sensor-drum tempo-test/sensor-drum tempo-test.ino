@@ -433,16 +433,18 @@ void loop() {
   //TEST CODE - HOLD UNTIL TOM HIT
   while(start == 0){
     tom = ads.readADC_SingleEnded(TOM);
-    if(tom > tom_ts){
+    if(tom > tom_th){
       start = 1;
     }
     test_start = millis();
-    next_increment = test_start + 60000;
+    next_increment = test_start + 120000;
+    new_tempo = 1;
   }
 
   if(millis() > next_increment){
     goal_bpm += 10;
     next_increment += 60000;
+    new_tempo = 1;
   }
 
   loop_start_time = micros();
