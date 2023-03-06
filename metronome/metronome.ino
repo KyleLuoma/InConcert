@@ -337,17 +337,17 @@ void loop() {
         next_movement += interval;
     }
 
-    retrieve_udp_packet_using_word(
-      incoming_udp_buffer,
-      &latest_tempo_message,
-      &latest_time_message
-    );
-    
-    // last_message_type = retrieve_udp_packet(
-    //   incoming_udp_buffer, 
-    //   &latest_tempo_message, 
+    // retrieve_udp_packet_using_word(
+    //   incoming_udp_buffer,
+    //   &latest_tempo_message,
     //   &latest_time_message
     // );
+    
+    last_message_type = retrieve_udp_packet(
+      incoming_udp_buffer, 
+      &latest_tempo_message, 
+      &latest_time_message
+    );
 
     if(last_message_type == TIME){
       if(tempo_updated == 1){

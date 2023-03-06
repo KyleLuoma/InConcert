@@ -20,7 +20,7 @@
 #define INIT_CYCLES 100    //Number of sample cycles to perform to evaluate baseline
 #define INPUT_THRESHOLD 250 //Amount of signal to increase above idle to register as a hit
 #define IGNORE_PERIOD 10 //Number of samples to ignore after a hit detection
-#define INTERVAL_LIMIT 64 //Number of interval values to store for analysis
+#define INTERVAL_LIMIT 32 //Number of interval values to store for analysis
 #define INTERVAL_MS_MIN 200 // Limit to 300 BPM and lower to minimize false positive beats
 #define INTERVAL_MS_TERMINATE 5000// Maximum interval before resetting counter (typically the end of a song)
 #define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
@@ -46,6 +46,7 @@ uint16_t any_sample_intervals[INTERVAL_LIMIT] = {0};
 uint16_t asi_ix = 0; // rolling index, reset at INTERVAL_LIMIT
 unsigned long calculated_tempo;
 uint32_t tempo_confidence = 100;
+byte new_tempo = 0;
 
 const int ledPin = LED_BUILTIN; 
 const int blueLedPin = 0;
@@ -363,7 +364,7 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
            most_likely_interval;
   unsigned long most_likely_tempo = 0;
   min_total_error = 1000000;
-  for(unsigned long check_intvl = 300; check_intvl < 1200; check_intvl += 25){
+  for(unsigned long check_intvl = 300; check_intvl < 1200; check_intvl += 10){
     total_error = 0;
     //Cycle through each recorded interval
     for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
@@ -441,13 +442,14 @@ void loop() {
   next_sample = getNextSampleUS(next_sample);
   
   //1 Send tempo packet
-  if(has_wifi == 1 && loopcounter % 500 == 0){
+  if(has_wifi == 1 && new_tempo == 1){
     //int32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
     sendTempoMessage(
       AGGServer, 
       (uint32_t)calculated_tempo, tempo_confidence, 
       (uint32_t)cur_beat, (uint32_t)cur_measure
     );
+    new_tempo = 0;
   }
 
   //2 Sample bass
@@ -569,13 +571,8 @@ void loop() {
     asi_ix++;
     if(asi_ix == INTERVAL_LIMIT){
       asi_ix = 0;
-      #ifdef EVENT_PRINT
-      Serial.print("INTERVAL VALUE DUMP:\n");
-      for(i = 0; i < INTERVAL_LIMIT; i++){
-        Serial.print(any_sample_intervals[i]); Serial.print(" MS\n");
-      }
-      #endif
       calculated_tempo = calculate_tempo_full(any_sample_intervals, 4);
+      new_tempo = 1;
     }
     any_sample_intvl_stored = 1;
   }
