@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
+
 //#include <util.h>
 
 #define htonl(x) ( ((x)<<24 & 0xFF000000UL) | \
@@ -13,16 +14,16 @@
 #define DEVICE_ID 1009
 
 int status = WL_IDLE_STATUS;
-//char ssid[] = "inconcert";        // your network SSID (name)
-//char pass[] = "itgoesto11";    // your network password (use for WPA, or use as key for WEP)
-char ssid[] = "milehighsalsero";        // your network SSID (name)
-char pass[] = "BabyH3li098";    // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "inconcert";        // your network SSID (name)
+char pass[] = "itgoesto11";    // your network password (use for WPA, or use as key for WEP)
+//char ssid[] = "milehighsalsero";        // your network SSID (name)
+//char pass[] = "BabyH3li098";    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;            // your network key Index number (needed only for WEP)
 
 unsigned int localPort = 54555;      // local port to listen for UDP packets
 
-IPAddress AGGServer(35, 92, 239, 128); // AWS Server
-//IPAddress AGGServer(10, 42, 0, 1); // Raspberry Pi
+//IPAddress AGGServer(35, 92, 239, 128); // AWS Server
+IPAddress AGGServer(10, 42, 0, 1); // Raspberry Pi
 
 const int AGG_PACKET_SIZE = 255;
 
