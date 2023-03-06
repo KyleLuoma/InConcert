@@ -26,10 +26,10 @@
 #define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
 #define MAX_US 4294967294U //Highest possible uS value
 
-// #define SERIAL_PRINT
+#define SERIAL_PRINT
 // #define DEBUG_PRINT
-#define EVENT_PRINT
-#define TEMPO_PRINT
+// #define EVENT_PRINT
+// #define TEMPO_PRINT
 
 
 Adafruit_ADS1115 ads;
@@ -510,6 +510,17 @@ void loop() {
 
   next_sample = getNextSampleUS(next_sample);
 
+#ifdef SERIAL_PRINT
+  //raw data:
+  Serial.print(millis()); Serial.print(", ");
+  Serial.print(snare_hit); Serial.print(", ");
+  Serial.print(bass_hit); Serial.print(", ");
+  Serial.print(cymbal_hit); Serial.print(", ");
+  Serial.print(tom_hit); Serial.print(", ");
+  Serial.print(calculated_tempo); Serial.print("\n");
+  //Hit determination
+#endif
+
   //5 Send event message if any hits are active
   if((snare_hit + cymbal_hit + tom_hit + bass_hit) > 0) {
     sendHitEventMessage(
@@ -632,14 +643,7 @@ void loop() {
   }
   digitalWrite(ledPin, led_state);
 
-#ifdef SERIAL_PRINT
-  //raw data:
-  Serial.print(snare); Serial.print(", ");
-  Serial.print(bass); Serial.print(", ");
-  Serial.print(cymbal); Serial.print(", ");
-  Serial.print(tom); Serial.print("\n");
-  //Hit determination
-#endif
+
   
   loopcounter++;
   while(micros() < next_sample){};
