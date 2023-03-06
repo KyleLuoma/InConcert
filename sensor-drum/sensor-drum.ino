@@ -72,8 +72,9 @@ int16_t cur_signature = 4;
 struct tempo_calc_result{
   unsigned long bpm;
   unsigned long error;
-  unsigned double residual;
-}
+  double residual;
+  unsigned long confidence;
+};
 
 struct tempo_calc_result current_tempo_data;
 
@@ -366,27 +367,27 @@ struct tempo_calc_result calculate_tempo_full(uint16_t * intervals, uint16_t sig
   #endif
   unsigned long total_error, min_total_error, 
            min_intvl_error, intvl_error,
-           most_likely_interval, potential_error, total_potential_error;
+           most_likely_interval, total_potential_error;
   unsigned long most_likely_tempo = 0;
   min_total_error = 1000000;
+  total_potential_error = 0;
+  for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
+    total_potential_error += intervals[ix];    
+  }
   for(unsigned long check_intvl = 350; check_intvl < 1200; check_intvl += 10){
     total_error = 0;
-    total_potential_error = 0;
     //Cycle through each recorded interval
     for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
       //Find the minimum distance
       min_intvl_error = 1000000;
-      potential_error = 0;
       for(unsigned long multiple = 1; multiple <= signature; multiple++){
         intvl_error = absolute_value((int)(intervals[ix] - (multiple * check_intvl)));
         if(intvl_error < min_intvl_error) {
           min_intvl_error = intvl_error;
-          potential_error = multiple * check_intvl;
         }
       }
       //add minimum error for the checked interval to total error
       total_error += min_intvl_error;
-      total_potential_error += potential_error;
     }
     if(total_error < min_total_error){
       min_total_error = total_error;
@@ -402,10 +403,12 @@ struct tempo_calc_result calculate_tempo_full(uint16_t * intervals, uint16_t sig
   Serial.print("Most likely tempo: "); Serial.print(most_likely_tempo); Serial.print(" BPM\n");
   Serial.print("Most likely interval: "); Serial.print(most_likely_interval); Serial.print(" MS\n");
   #endif
+
   struct tempo_calc_result result;
   result.bpm = most_likely_tempo;
   result.error = min_total_error;
-  result.residual = min_total_error/ total_potential_error;
+  result.residual = (double)min_total_error / (double)total_potential_error;
+  result.confidence = (unsigned long)((1 - current_tempo_data.residual)*100);
   return result;
 }
 
@@ -459,7 +462,7 @@ void loop() {
     //int32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
     sendTempoMessage(
       AGGServer, 
-      (uint32_t)current_tempo_data.bpm, (uint32_t)((1 - current_tempo_data.residual)*100), 
+      (uint32_t)current_tempo_data.bpm, (uint32_t)current_tempo_data.confidence, 
       (uint32_t)cur_beat, (uint32_t)cur_measure
     );
     new_tempo = 0;
@@ -530,7 +533,8 @@ void loop() {
   Serial.print(bass_hit); Serial.print(", ");
   Serial.print(cymbal_hit); Serial.print(", ");
   Serial.print(tom_hit); Serial.print(", ");
-  Serial.print(current_tempo_data.bpm); Serial.print("\n");
+  Serial.print(current_tempo_data.bpm); Serial.print(", ");
+  Serial.print(current_tempo_data.confidence); Serial.print("\n");
   //Hit determination
 #endif
 
