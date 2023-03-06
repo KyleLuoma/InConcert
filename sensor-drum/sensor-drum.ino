@@ -44,7 +44,6 @@ unsigned long snare_hit_ms, cymbal_hit_ms, bass_hit_ms, tom_hit_ms, any_hit_ms;
 unsigned long snare_intvl, cymbal_intvl, bass_intvl, tom_intvl, any_sample_intvl;
 uint16_t any_sample_intervals[INTERVAL_LIMIT] = {0};
 uint16_t asi_ix = 0; // rolling index, reset at INTERVAL_LIMIT
-unsigned long calculated_tempo;
 uint32_t tempo_confidence = 100;
 byte new_tempo = 0;
 
@@ -70,7 +69,13 @@ unsigned long last_time_message_ms, next_beat_ms;
 int16_t cur_measure, cur_beat, cur_beat_interval, last_beat, last_measure;
 int16_t cur_signature = 4;
 
+struct tempo_calc_result{
+  unsigned long bpm;
+  unsigned long error;
+  unsigned double residual;
+}
 
+struct tempo_calc_result current_tempo_data;
 
 IPAddress AGGServer(10, 42, 0, 1); // Aggregator wifi hotspot address
 WiFiUDP udp_out;
@@ -353,7 +358,7 @@ unsigned long absolute_value(int number){
 }
 
 //Perform tempo calculation algorithm on full interval array
-unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
+struct tempo_calc_result calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
   //Cycle through possible intervals from low to high (~170 BPM to 50 BPM)
   #ifdef TEMPO_PRINT
   Serial.print("Starting tempo calculation.\n");
@@ -361,23 +366,27 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
   #endif
   unsigned long total_error, min_total_error, 
            min_intvl_error, intvl_error,
-           most_likely_interval;
+           most_likely_interval, potential_error, total_potential_error;
   unsigned long most_likely_tempo = 0;
   min_total_error = 1000000;
   for(unsigned long check_intvl = 350; check_intvl < 1200; check_intvl += 10){
     total_error = 0;
+    total_potential_error = 0;
     //Cycle through each recorded interval
     for(unsigned long ix = 0; ix < INTERVAL_LIMIT; ix++) {
       //Find the minimum distance
       min_intvl_error = 1000000;
+      potential_error = 0;
       for(unsigned long multiple = 1; multiple <= signature; multiple++){
         intvl_error = absolute_value((int)(intervals[ix] - (multiple * check_intvl)));
         if(intvl_error < min_intvl_error) {
           min_intvl_error = intvl_error;
+          potential_error = multiple * check_intvl;
         }
       }
       //add minimum error for the checked interval to total error
       total_error += min_intvl_error;
+      total_potential_error += potential_error;
     }
     if(total_error < min_total_error){
       min_total_error = total_error;
@@ -393,7 +402,11 @@ unsigned long calculate_tempo_full(uint16_t * intervals, uint16_t signature) {
   Serial.print("Most likely tempo: "); Serial.print(most_likely_tempo); Serial.print(" BPM\n");
   Serial.print("Most likely interval: "); Serial.print(most_likely_interval); Serial.print(" MS\n");
   #endif
-  return most_likely_tempo;
+  struct tempo_calc_result result;
+  result.bpm = most_likely_tempo;
+  result.error = min_total_error;
+  result.residual = min_total_error/ total_potential_error;
+  return result;
 }
 
 //Operates on a periodic schedule:
@@ -446,7 +459,7 @@ void loop() {
     //int32_t tempo, uint32_t confidence, uint32_t beat, uint32_t measure
     sendTempoMessage(
       AGGServer, 
-      (uint32_t)calculated_tempo, tempo_confidence, 
+      (uint32_t)current_tempo_data.bpm, (uint32_t)((1 - current_tempo_data.residual)*100), 
       (uint32_t)cur_beat, (uint32_t)cur_measure
     );
     new_tempo = 0;
@@ -517,7 +530,7 @@ void loop() {
   Serial.print(bass_hit); Serial.print(", ");
   Serial.print(cymbal_hit); Serial.print(", ");
   Serial.print(tom_hit); Serial.print(", ");
-  Serial.print(calculated_tempo); Serial.print("\n");
+  Serial.print(current_tempo_data.bpm); Serial.print("\n");
   //Hit determination
 #endif
 
@@ -582,7 +595,7 @@ void loop() {
     asi_ix++;
     if(asi_ix == INTERVAL_LIMIT){
       asi_ix = 0;
-      calculated_tempo = calculate_tempo_full(any_sample_intervals, 4);
+      current_tempo_data = calculate_tempo_full(any_sample_intervals, 4);
       new_tempo = 1;
     }
     any_sample_intvl_stored = 1;
