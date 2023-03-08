@@ -349,6 +349,10 @@ void loop() {
       &latest_time_message
     );
 
+    if(last_message_type == EVENT){
+      Serial.print("Received event message");
+    }
+
     if(last_message_type == TIME){
       if(tempo_updated == 1){
           next_movement = millis() + interval;
@@ -366,7 +370,7 @@ void loop() {
         }
       }
       
-      Serial.print("Received time message.\n");
+      // Serial.print("Received time message.\n");
     }
     if(last_message_type == TEMPO && latest_tempo_message.bpm > 0) {
       interval = (60000/latest_tempo_message.bpm) / r_signature;

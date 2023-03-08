@@ -26,10 +26,10 @@
 #define UDP_READ_TIMEOUT 2 //Number of ms until timing out on UDP read
 #define MAX_US 4294967294U //Highest possible uS value
 
-#define SERIAL_PRINT
+// #define SERIAL_PRINT
 // #define DEBUG_PRINT
-// #define EVENT_PRINT
-// #define TEMPO_PRINT
+#define EVENT_PRINT
+#define TEMPO_PRINT
 
 
 Adafruit_ADS1115 ads;
