@@ -7,6 +7,7 @@
 
 #define NUM_LEDS 7
 #define UDP_READ_TIMEOUT 4
+#define BUTTON_IGNORE_MS 500
 
 //int led_pin_array[NUM_LEDS] = {3,4,5,6,7};
 int led_pin_array[NUM_LEDS] = {2,3,4,5,6,7,8};
@@ -15,6 +16,7 @@ int led_status_array[NUM_LEDS] = {LOW};
 int buzzer_pin = 9;
 int button_pin = 10;
 int button_state = LOW;
+unsigned long ignore_button_until = 0;
 int alert_led_pin = 11;
 
 char ssid[] = SSID;
@@ -288,15 +290,19 @@ int output_mode = 0; //0: audio and light; 1: light only; 2: audio only; 3: off
 
 void loop() {
 
-    button_state = digitalRead(button_pin);
-    if(button_state == LOW){
-      if(output_mode == 3){
-        output_mode = 0;
-      } else {
-        output_mode++;
+    if(ignore_button_until < millis()){
+      button_state = digitalRead(button_pin);
+      if(button_state == LOW){
+        if(output_mode == 3){
+          output_mode = 0;
+        } else {
+          output_mode++;
+        }
+        Serial.print("Button press detected\n");
       }
-      Serial.print("Button press detected\n");
+      ignore_button_until = millis() + BUTTON_IGNORE_MS;
     }
+    
 
     if(millis() > next_movement) {
         // move led back and forth
@@ -350,7 +356,7 @@ void loop() {
     );
 
     if(last_message_type == EVENT){
-      Serial.print("Received event message");
+      Serial.print("Received event message\n");
     }
 
     if(last_message_type == TIME){
