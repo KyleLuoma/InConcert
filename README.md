@@ -46,13 +46,18 @@ NOTE: do this ONLY if the device can't receive message over the broadcast, as it
 
 ### Sensor-Dance
 
-### Sensor-Analog-Signal
-
 ### Actuator-Stage-Lights
 
 ### Actuator-Metronome
 
-### Actuator-Effects
+#### Communications:
+
+##### Sends:
+Nothing
+
+##### Receives:
+ - Tempo messages: used for updating pendulum rate
+ - Time messages: Used for re-synching with the aggregator main rhythm after a new tempo message is received
 
 
 
