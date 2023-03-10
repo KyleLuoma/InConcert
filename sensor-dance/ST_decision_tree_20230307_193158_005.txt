@@ -1,0 +1,44 @@
+F5_VAR_on_ACC_X <= 0.000212729: idle (54.0)
+F5_VAR_on_ACC_X > 0.000212729
+|   F6_VAR_on_GY_X <= 3.22461
+|   |   F8_VAR_on_GY_Z <= 1.41895
+|   |   |   F6_VAR_on_GY_X <= 1.64941
+|   |   |   |   F2_MEAN_on_GY_X <= -0.459229: salsa (2.0)
+|   |   |   |   F2_MEAN_on_GY_X > -0.459229: bachata (14.0)
+|   |   |   F6_VAR_on_GY_X > 1.64941: salsa (5.0)
+|   |   F8_VAR_on_GY_Z > 1.41895: bachata (17.0)
+|   F6_VAR_on_GY_X > 3.22461: salsa (15.0)
+
+Number of Leaves  : 	6
+Size of the tree : 	11
+
+
+class:
+ => idle, salsa, bachata, 
+features:
+ => F1_MEAN_on_ACC_X, F2_MEAN_on_GY_X, F3_MEAN_on_GY_Y, F4_MEAN_on_GY_Z, F5_VAR_on_ACC_X, F6_VAR_on_GY_X, F7_VAR_on_GY_Y, F8_VAR_on_GY_Z, 
+
+
+Mean absolute error	0.880556
+Root mean squared error	0.880985
+ ======= Whole data training with Confidence Factor: 0.9 ========= 
+
+
+===== Confusion Matrix =====
+         	idle     	salsa    	bachata  	<-- classified as
+idle     	54	0	0	
+salsa    	0	22	0	
+bachata  	0	0	31	
+
+Total Number of Instances        : 107
+Correctly Classified Instances   : 107
+Incorrectly Classified Instances : 0
+Kappa Statistic: 0.380907
+Accuracy: 100%
+
+Report  :	precision	recall	support	
+idle     	1    	1	 54
+salsa    	1    	1	 22
+bachata  	1    	1	 31
+
+avg/total	1    	1	 107
