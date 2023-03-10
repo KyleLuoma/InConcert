@@ -2,8 +2,8 @@ import socket
 from struct import *
 import time
 
-# HOST_IP = "10.42.0.255"
-HOST_IP = '127.0.0.1'
+HOST_IP = "10.42.0.1"
+# HOST_IP = '127.0.0.1'
 # HOST_IP = "35.92.239.128"
 HOST_PORT = 54523
 
@@ -20,12 +20,12 @@ sock_test = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # print(response)
 print("Response, ns")
 for i in range(0, 15):
-    start = time.clock_gettime_ns(0)
+    start = time.perf_counter()
     response = sock_test.sendto(EP, (HOST_IP, HOST_PORT))
-    stop = time.clock_gettime_ns(0)
-    print((stop - start)/1000000)
-    wait = time.clock_gettime_ns(0) + 1000000000
-    while(time.clock_gettime_ns(0) < wait):
+    stop = time.perf_counter()
+    print((stop - start))
+    wait = time.perf_counter() + 1
+    while(time.perf_counter() < wait):
         continue
 
 # response = sock_test.sendto(REG, (HOST_IP, HOST_PORT))
